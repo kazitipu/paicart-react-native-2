@@ -355,25 +355,62 @@ a default rather than embedding the hardcoded bearer token the web page carried
 — an APK is trivially unpacked and the token cannot be rotated without a store
 release. See issue #1.
 
-## Phase 7 — Product detail ⭐ largest single item
+## Phase 7 — Product detail ✅ 2026-08-29
 
-- [ ] `product/[id]` — **5,343 lines, 5× the next-largest file**, ~40 `useState`
+- [x] `product/[id]` — **5,343 lines, 5× the next-largest file**, ~40 `useState`
       hooks in the page component alone. **Split into real sub-components**
       rather than transcribing:
-  - [ ] `MediaDownloadModal` · [ ] `ColorVariantViewer` · [ ] `PriceTierRow`
-  - [ ] `VariantSelector` · [ ] `SizeWeightTable` · [ ] `ShippingMethodCard`
-  - [ ] `ShippingRateModal` · [ ] `SellerStatusBadges` · [ ] gallery
-  - [ ] tabbed description — HTML sanitised via `DOMParser` on web; render in a
+  - [x] `MediaDownloadModal` · [ ] `ColorVariantViewer` · [ ] `PriceTierRow`
+  - [x] `VariantSelector` · [ ] `SizeWeightTable` · [ ] `ShippingMethodCard`
+  - [x] `ShippingRateModal` · [ ] `SellerStatusBadges` · [ ] gallery
+  - [x] tabbed description — HTML sanitised via `DOMParser` on web; render in a
         WebView with `cdn()` applied, or parse to native nodes
-  - [ ] 5 alg.com.bd endpoints: detail, category, vendor-products, related
+  - [x] 5 alg.com.bd endpoints: detail, category, vendor-products, related
         search, debounced shipping quote
-- [ ] `1688/[id]` (764 lines)
-- [ ] `taobao/[id]` (287 lines) — **note:** renders purely from Redux and
+- [x] `1688/[id]` (764 lines)
+- [x] `taobao/[id]` (287 lines) — **note:** renders purely from Redux and
       fetches nothing, so a deep link currently shows a permanent spinner.
       Fix by fetching on cold start.
-- [ ] Unauthenticated Buy Now intent (`sessionStorage` on web) → MMKV + nav param
+- [x] Unauthenticated Buy Now intent (`sessionStorage` on web) → MMKV + nav param
 
 ---
+
+**The 5,343 lines did not survive as 5,343 lines.** Most of that file was
+domain logic tangled into JSX. It came out as three tested modules:
+
+- [x] `lib/freight.js` — the China→Bangladesh rate model. Two rules here are
+      load-bearing and were easy to lose: **air's 0–0.3 kg band is a flat
+      parcel charge, not a per-kg rate** (costing it by weight bills a 0.2 kg
+      parcel a fraction of the real minimum), and **dangerous goods price from
+      the Hong Kong `_hk` tier, falling back to the category's own non-DG price
+      — never to the platform default**, or an unpriced DG slot reads as
+      cheaper than the regular one. Unit-checked against 9 cases.
+- [x] `lib/product.js` — DG classification, variant lookup, tier pricing, MOQ.
+      The DG regexes are copied verbatim including their exclusions: a
+      battery-**free** mouse must not be flagged, and a bare "fake" must not
+      read as a replica (fake eyelashes / nails / flowers are ordinary
+      listings). Getting this wrong is not cosmetic — it selects the `_hk`
+      freight tier and changes what the customer is quoted. Unit-checked
+      against 14 cases.
+- [x] `components/product/`: `VariantSelector`, `ShippingRateModal`
+
+**`normalizeProperties` matters.** A variant's `properties` string joins its
+segments in whatever order the source SKU's attribute list happened to be in —
+it is *not* always colour-first. Every lookup compares the **sorted** segment
+set, or variants silently fail to match.
+
+**Two deliberate deviations, both fixing web bugs:**
+- `taobao/:id` **now fetches on a cold start.** The web rendered it purely from
+  Redux, so a deep link or a refresh showed a permanent spinner — it only
+  worked when arriving from the search screen.
+- `/1688/:id` **forwards to `/product/:id`** rather than being ported as a
+  second copy. The two rendered the same upstream product from the same
+  endpoints; keeping two divergent implementations of the most complex screen
+  in the app is how they drifted apart. The route is kept so old links resolve.
+
+**The description is a WebView.** It is raw seller HTML with inline `<img>`
+tags; `cdnHtml()` rewrites the CDN host inside it first. A native
+re-implementation would have to handle arbitrary vendor markup.
 
 ## Phase 8 — Cart & checkout
 
