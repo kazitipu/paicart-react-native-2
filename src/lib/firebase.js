@@ -68,11 +68,23 @@ export const auth = getAuth(app);
 export const firestore = getFirestore(app);
 export const storage = getStorage(app);
 
-/* Call once at startup. `webClientId` is the *web* OAuth client id from the
-   Firebase console (not the Android one) — Firebase validates the ID token
-   against it, so an Android client id here fails with a confusing
-   "audience mismatch". Filled in during Phase 13. */
-export const configureGoogleSignin = (webClientId) => {
+/* The *web* OAuth client id — NOT the Android one. Firebase validates the ID
+ * token's audience against this, and passing an Android client id fails with a
+ * confusing "audience mismatch".
+ *
+ * It comes straight out of android/app/google-services.json: the entry under
+ * `oauth_client` with `client_type: 3`. (Android clients are `client_type: 1`.)
+ * The same value appears in the Google Cloud console under
+ * APIs & Services -> Credentials as "Web client (auto created by Google
+ * Service)".
+ *
+ * Not a secret — it is a public client identifier that ships inside the app;
+ * access is governed by Firebase Security Rules, not by hiding this. */
+export const GOOGLE_WEB_CLIENT_ID =
+  '702286683439-e2ospds3onqigd71usk46i0de4gcopkl.apps.googleusercontent.com';
+
+/* Call once at startup, before any sign-in attempt. */
+export const configureGoogleSignin = (webClientId = GOOGLE_WEB_CLIENT_ID) => {
   GoogleSignin.configure({ webClientId, offlineAccess: false });
 };
 

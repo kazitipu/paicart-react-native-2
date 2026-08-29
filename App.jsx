@@ -6,12 +6,17 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import Providers from '@/components/Providers';
+import { configureGoogleSignin } from '@/lib/firebase';
 import RootNavigator from '@/navigation/RootNavigator';
 import linking from '@/navigation/linking';
 import ToastProvider from '@/components/ToastProvider';
 import FloatingWhatsApp from '@/components/FloatingWhatsApp';
 import FlyToIconAnimation from '@/components/FlyToIconAnimation';
 import colors from '@/theme/colors';
+
+/* Must run before any sign-in attempt. Module scope rather than an effect so
+   it cannot race a user tapping "Continue with Google" on first paint. */
+configureGoogleSignin();
 
 export default function App() {
   return (

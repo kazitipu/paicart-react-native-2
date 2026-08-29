@@ -16,7 +16,7 @@ buildscript {
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
         // Reads android/app/google-services.json - see Phase 13 in MIGRATION.md
-        classpath("com.google.gms:google-services:4.4.2")
+        classpath("com.google.gms:google-services:4.5.0")
     }
 }
 

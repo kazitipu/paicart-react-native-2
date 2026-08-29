@@ -623,23 +623,51 @@ below are blocked on things only you can do, then Android is one command.
 - [x] Deep-link intent filters: the `paicart://` scheme (which carries
       `paicart://payment-return`) and `https://paicart.com` /
       `https://www.paicart.com` with `autoVerify`
-- [x] `com.google.gms:google-services` plugin wired into both gradle files
+- [x] `com.google.gms:google-services` plugin **4.5.0** wired into both gradle
+      files (matching the version `@react-native-firebase` itself pins under
+      `sdkVersions.android.gmsGoogleServicesGradle`)
+- [x] **Firebase BoM deliberately NOT added.** The Firebase Android setup docs
+      tell you to put `implementation platform('com.google.firebase:firebase-bom:34.18.0')`
+      and per-product SDK dependencies in the app-level gradle file. That guidance
+      is for native Android apps using the Firebase SDK directly. **RNFirebase
+      already does it** — `@react-native-firebase/app` applies
+      `firebase-bom:34.18.0` (the same version) and each of `/auth`,
+      `/firestore`, `/storage` declares its own product dependency against it.
+      Adding them by hand is redundant and risks a version conflict. Only the
+      google-services *plugin* half of those instructions applies to us.
 - [x] iOS `Info.plist` — camera / photo-library / photo-add usage strings,
       the `paicart` URL scheme, and `LSApplicationQueriesSchemes`
 - [x] `usesCleartextTraffic` is already templated; `cdn()` forces `https:`
       anyway, so no HTTP image should reach the network layer
 
 ### Blocked on you
-- [ ] **Register the apps in the existing `paicart` Firebase project.**
-      Android package **`com.paicart.app`**, iOS bundle **`com.paicart.app`**.
-      Drop `google-services.json` into `android/app/` and
-      `GoogleService-Info.plist` into `ios/Paicart/`. **Nothing Firebase works
-      until this is done** — the config is read from those files, not from the
-      hardcoded object the web used (that one carries a `:web:` appId).
-- [ ] **Google Sign-In web client id.** Take the *web* OAuth client id from the
-      Firebase console (not the Android one — Firebase validates the ID token
-      against it, and an Android id fails with a confusing audience mismatch)
-      and pass it to `configureGoogleSignin()` at startup.
+- [x] **Android app registered** as `com.paicart.app` in the `paicart` project;
+      `android/app/google-services.json` is in place (2026-08-30).
+- [x] **Google Sign-In web client id wired** — `GOOGLE_WEB_CLIENT_ID` in
+      `src/lib/firebase.js`, called from `App.jsx` at module scope.
+- [ ] ⚠️ **Add a SHA-1 fingerprint for `com.paicart.app`.** The supplied
+      `google-services.json` has **no `client_type: 1` (Android) OAuth client**
+      for our package — only the `client_type: 3` (web) one. That means no
+      signing certificate is registered, and **Google Sign-In will fail on
+      Android** with `DEVELOPER_ERROR` until one is added. Note the file's
+      *other* client, the older `com.paicart`, does have a `client_type: 1`
+      entry — so this is specific to the new package, not the project.
+
+      Firebase console -> Project settings -> Your apps -> the
+      `com.paicart.app` Android app -> Add fingerprint. Debug keystore SHA-1
+      (`android/app/debug.keystore`):
+
+      ```
+      5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+      ```
+
+      Add the **release** keystore's SHA-1 too before shipping, and the Play
+      App Signing SHA-1 from the Play Console if you use it — each signing
+      certificate needs its own fingerprint. Re-download
+      `google-services.json` afterwards; it should then carry a
+      `client_type: 1` entry for `com.paicart.app`.
+- [ ] **iOS:** register the `com.paicart.app` bundle and drop
+      `GoogleService-Info.plist` into `ios/Paicart/`. Not yet supplied.
 - [ ] **Firestore composite indexes** for the dashboard stat counts
       (`getOrderStatCounts` / `getShipStatCounts` use `getCountFromServer`):
       `ordersApi` on (userId + paymentStatus), (userId + shipmentStatusScore),

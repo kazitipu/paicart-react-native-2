@@ -1,0 +1,90 @@
+{
+  "project_info": {
+    "project_number": "702286683439",
+    "project_id": "paicart",
+    "storage_bucket": "paicart.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:702286683439:android:dc18c7f6198eec8f9ed5da",
+        "android_client_info": {
+          "package_name": "com.paicart"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "702286683439-d9f6q3frk6suv93u4qvp0m80bkun9hhk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.paicart",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "702286683439-e2ospds3onqigd71usk46i0de4gcopkl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTg3w2d30N98vqLSzP-v_6kH7V-6S8fvk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "702286683439-e2ospds3onqigd71usk46i0de4gcopkl.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "702286683439-d1ac5ijtbdvlapo8ti3dkcn2d67dhc4j.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.paicart"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:702286683439:android:d470e04689c101d39ed5da",
+        "android_client_info": {
+          "package_name": "com.paicart.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "702286683439-e2ospds3onqigd71usk46i0de4gcopkl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTg3w2d30N98vqLSzP-v_6kH7V-6S8fvk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "702286683439-e2ospds3onqigd71usk46i0de4gcopkl.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "702286683439-d1ac5ijtbdvlapo8ti3dkcn2d67dhc4j.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.paicart"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
