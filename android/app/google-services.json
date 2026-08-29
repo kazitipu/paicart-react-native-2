@@ -58,6 +58,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "702286683439-fi17mtuignif7v8qebsn9ief5atjid4o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.paicart.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
           "client_id": "702286683439-e2ospds3onqigd71usk46i0de4gcopkl.apps.googleusercontent.com",
           "client_type": 3
         }

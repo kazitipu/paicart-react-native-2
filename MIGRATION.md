@@ -645,27 +645,17 @@ below are blocked on things only you can do, then Android is one command.
       `android/app/google-services.json` is in place (2026-08-30).
 - [x] **Google Sign-In web client id wired** — `GOOGLE_WEB_CLIENT_ID` in
       `src/lib/firebase.js`, called from `App.jsx` at module scope.
-- [ ] ⚠️ **Add a SHA-1 fingerprint for `com.paicart.app`.** The supplied
-      `google-services.json` has **no `client_type: 1` (Android) OAuth client**
-      for our package — only the `client_type: 3` (web) one. That means no
-      signing certificate is registered, and **Google Sign-In will fail on
-      Android** with `DEVELOPER_ERROR` until one is added. Note the file's
-      *other* client, the older `com.paicart`, does have a `client_type: 1`
-      entry — so this is specific to the new package, not the project.
+- [x] **SHA-1 fingerprint added** for `com.paicart.app` (2026-08-30). The
+      refreshed `google-services.json` now carries a `client_type: 1` (Android)
+      OAuth client whose `certificate_hash` matches the debug keystore
+      (`5E:8F:...:F6:25`). Google Sign-In is unblocked for debug builds.
 
-      Firebase console -> Project settings -> Your apps -> the
-      `com.paicart.app` Android app -> Add fingerprint. Debug keystore SHA-1
-      (`android/app/debug.keystore`):
-
-      ```
-      5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
-      ```
-
-      Add the **release** keystore's SHA-1 too before shipping, and the Play
-      App Signing SHA-1 from the Play Console if you use it — each signing
-      certificate needs its own fingerprint. Re-download
-      `google-services.json` afterwards; it should then carry a
-      `client_type: 1` entry for `com.paicart.app`.
+      Still to do **before shipping**: the `release` build type is currently
+      signed with the **debug** keystore (the RN template's placeholder — see
+      `android/app/build.gradle`). Generate a real release keystore, register
+      its SHA-1 too, and add the Play App Signing SHA-1 if you use it. Each
+      signing certificate needs its own fingerprint or sign-in breaks for
+      builds made with it.
 - [ ] **iOS:** register the `com.paicart.app` bundle and drop
       `GoogleService-Info.plist` into `ios/Paicart/`. Not yet supplied.
 - [ ] **Firestore composite indexes** for the dashboard stat counts
