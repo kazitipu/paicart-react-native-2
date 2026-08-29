@@ -9,6 +9,8 @@ import Providers from '@/components/Providers';
 import RootNavigator from '@/navigation/RootNavigator';
 import linking from '@/navigation/linking';
 import ToastProvider from '@/components/ToastProvider';
+import FloatingWhatsApp from '@/components/FloatingWhatsApp';
+import FlyToIconAnimation from '@/components/FlyToIconAnimation';
 import colors from '@/theme/colors';
 
 export default function App() {
@@ -39,7 +41,10 @@ export default function App() {
           >
             <RootNavigator />
           </NavigationContainer>
-          {/* Above the navigator so toasts float over every screen. */}
+          {/* Mounted above the navigator so they overlay every screen — the
+              web mounted the same three in its root layout. */}
+          <FlyToIconAnimation />
+          <FloatingWhatsApp />
           <ToastProvider />
         </Providers>
       </SafeAreaProvider>
