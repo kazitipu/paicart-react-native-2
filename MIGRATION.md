@@ -541,16 +541,32 @@ which is DOM-only. Documents open in whatever app the phone has for them via
 **`BANK_ACCOUNTS` moved to `lib/payments.js`** in Phase 4, resolving the web's
 inversion where `PrePaymentModal` imported it *upward* out of a route folder.
 
-## Phase 11 — Invoices, refunds, points, profile
+## Phase 11 — Invoices, refunds, points, profile ✅ 2026-08-30
 
-- [ ] Shipment invoice · [ ] dual-mode order/product-request invoice → PDF + share
-- [ ] Refund screen (3-tab switcher: orders / product requests / shipments)
-- [ ] Points (`buyerLevel.js`, thresholds 0 / 100k / 300k / 500k Tk)
-- [ ] User Information (586 lines) — Personal / Company / Address Book tabs,
+- [x] Shipment invoice · [ ] dual-mode order/product-request invoice → PDF + share
+- [x] Refund screen (3-tab switcher: orders / product requests / shipments)
+- [x] Points (`buyerLevel.js`, thresholds 0 / 100k / 300k / 500k Tk)
+- [x] User Information (586 lines) — Personal / Company / Address Book tabs,
       with the RedX `areas` district→area dropdown that `place-order` later
       reads for `delivery_area_id`
 
 ---
+
+**Invoices render twice from one source.** Each invoice screen passes the same
+data to the native view and to `toHtml()` for the PDF, so the document and the
+screen cannot disagree on the figures.
+
+**`OrderInvoice` falls back rather than requiring its flag.** The web read a
+query-string flag to decide whether the id named an order or a product request.
+A deep link from an email may not carry it, so it tries the order first and
+falls back to the request.
+
+**Address book:** the RedX area object is stored whole on the address —
+`place-order` later reads `area.id` as `delivery_area_id`. Exactly one address
+is default at a time, the first one added becomes it automatically (checkout
+has nothing to ship to otherwise), and deleting the default promotes another.
+When the RedX proxy is absent the area list is empty and the screen says so
+instead of blocking the save.
 
 ## Phase 12 — Public & static screens
 
