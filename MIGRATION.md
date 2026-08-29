@@ -412,27 +412,58 @@ set, or variants silently fail to match.
 tags; `cdnHtml()` rewrites the CDN host inside it first. A native
 re-implementation would have to handle arbitrary vendor markup.
 
-## Phase 8 — Cart & checkout
+## Phase 8 — Cart & checkout ✅ 2026-08-30
 
-- [ ] **Cart** (1,272 lines) — per-shop/item/SKU selection tree, quantity
+- [x] **Cart** (1,272 lines) — per-shop/item/SKU selection tree, quantity
       steppers that re-derive the wholesale tier price, per-item live shipping
       quotes, metadata backfill, pre-checkout stock verification (parallel
       `Promise.all` re-fetch) + drop-out-of-stock modal
-- [ ] **Place Order** (1,015 lines) — **this is the checkout page**; there is no
+- [x] **Place Order** (1,015 lines) — **this is the checkout page**; there is no
       `src/app/checkout` in the web app. Address from `addressBook`, per-shop
       RedX delivery charge, coupon lookup, per-item campaign-vs-site discount,
       one order document written per shop, then `PrePaymentModal`.
-  - [ ] ⚠️ **`REDX_TOKEN` is a hardcoded bearer token** (web line 36). Do not
+  - [x] ⚠️ **`REDX_TOKEN` is a hardcoded bearer token** (web line 36). Do not
         ship it in the bundle — an APK is trivially unpacked. Put the charge
         calculator behind a configurable base URL; backend task logged below.
-- [ ] Payment modals — replace `window.open(bkashURL,'_self')` with
+- [x] Payment modals — replace `window.open(bkashURL,'_self')` with
       `react-native-inappbrowser-reborn` returning to `paicart://payment-return`
-  - [ ] **Preserve the money rules exactly:** default amount
+  - [x] **Preserve the money rules exactly:** default amount
         `initialAmount ?? (totalPaid === 0 ? round(totalDue * 0.6) : totalDue)`;
         first payment ≥60% of due unless a tier was taken; bKash fee 1.5%
-- [ ] Order Success screens
+- [x] Order Success screens
 
 ---
+
+**Two tested modules carry the rules both the cart and the checkout depend on:**
+
+- [x] `lib/cart.js` — the three stacked quantity constraints: **batch** (a pack
+      size that is also the floor, and every quantity snaps to a multiple),
+      **MOQ** (a per-PRODUCT minimum counted across every variant, so one
+      line's floor depends on what its siblings hold), and **stock**.
+      `availableFor()` returns null when the upstream gives nothing to judge
+      by — an unknown must never block a legitimate order. 17 cases checked.
+- [x] `lib/checkout.js` — basket totals, coupon caps, the pre-order block
+      reasons, and `buildOrderDocs`. **Discount precedence matters:** a per-item
+      `campaignDiscountPercent` supersedes the site-wide discount for that item,
+      and a basket can mix both — so it is summed per item, never applied once
+      to the basket total. 15 cases checked.
+
+**Screens:** `Cart` (selection tree, batch-aware steppers, live stock re-check
+with a drop-and-continue sheet), `PlaceOrder` (address, per-shop RedX charge,
+coupon, per-seller notes, one order document per shop, then `PrePaymentModal`),
+plus the success and legacy detail screens.
+
+**Duplicates forwarded rather than re-ported:** `/dashboard/pages/cart` (a
+78-line simplified copy of the main cart) and `/dashboard/pages/orders/:orderId`
+(a thinner copy of the order detail). Both routes still resolve.
+
+**The double-submit guard is preserved.** Every shop builds its own `orderId`
+from `Math.random()`, so a second run creates a whole extra order rather than
+colliding harmlessly. `submittingRef` is cleared only on failure — on success
+it stays set, because the order exists.
+
+**RedX delivery charge** returns null while no proxy exists, so the default 100
+stands rather than the order being blocked. See issue #1.
 
 ## Phase 9 — Dashboard: orders & product requests
 
