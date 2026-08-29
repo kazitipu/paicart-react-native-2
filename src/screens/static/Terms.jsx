@@ -1,7 +1,7 @@
 import React from 'react';
-import ScreenStub from '@/components/ScreenStub';
+import ContentPage from '@/components/ContentPage';
+import { LEGAL_CONTENT } from '@/data/legalContent';
 
-/* TODO: port from ../paicart-nextjs15 — see MIGRATION.md. */
-export default function Terms(props) {
-  return <ScreenStub name="Terms" route={props.route} />;
+export default function Terms() {
+  return <ContentPage doc={LEGAL_CONTENT.terms} />;
 }

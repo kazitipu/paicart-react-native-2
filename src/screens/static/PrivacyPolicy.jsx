@@ -1,7 +1,7 @@
 import React from 'react';
-import ScreenStub from '@/components/ScreenStub';
+import ContentPage from '@/components/ContentPage';
+import { LEGAL_CONTENT } from '@/data/legalContent';
 
-/* TODO: port from ../paicart-nextjs15 — see MIGRATION.md. */
-export default function PrivacyPolicy(props) {
-  return <ScreenStub name="PrivacyPolicy" route={props.route} />;
+export default function PrivacyPolicy() {
+  return <ContentPage doc={LEGAL_CONTENT.privacyPolicy} />;
 }

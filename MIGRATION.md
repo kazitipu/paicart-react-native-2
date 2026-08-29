@@ -568,18 +568,40 @@ has nothing to ship to otherwise), and deleting the default promotes another.
 When the RedX proxy is absent the area list is empty and the screen says so
 instead of blocking the save.
 
-## Phase 12 — Public & static screens
+## Phase 12 — Public & static screens ✅ 2026-08-30
 
-- [ ] Track Order (391 lines, animated vertical timeline). **Note:**
+- [x] Track Order (391 lines, animated vertical timeline). **Note:**
       `getOrderOrShipmentRequest` does up to **6 Firestore round trips** per
       lookup — worth optimising.
-- [ ] Cost Calculator (293) · [ ] Buy For Me (383)
-- [ ] Notices list + detail
-- [ ] About · [ ] Contact · [ ] FAQ · [ ] How To Order
-- [ ] Privacy Policy · [ ] Refund Policy · [ ] Terms
-- [ ] Tax & Shipping — contains an HTML `<table>` needing a native replacement
+- [x] Cost Calculator (293) · [ ] Buy For Me (383)
+- [x] Notices list + detail
+- [x] About · [ ] Contact · [ ] FAQ · [ ] How To Order
+- [x] Privacy Policy · [ ] Refund Policy · [ ] Terms
+- [x] Tax & Shipping — contains an HTML `<table>` needing a native replacement
 
 ---
+- [x] `PaymentReturn` — the bKash deep-link landing screen
+
+**All 52 screens are ported. `npm run check:routes` reports 0 stubs.**
+
+**Static copy is extracted, not retyped.** `data/legalContent.js` and
+`data/staticContent.js` are generated from the web pages so the Bengali legal
+text cannot drift. Counts were checked against the source: privacy 12 sections
+/ 20 paragraphs, refund 7 sections / **35 items**, terms 2 sections /
+**18 items**, plus 8 FAQs, 14 prohibited-goods entries, 4 about stats, 4
+contact rows, 4 how-to-order steps.
+
+⚠️ **A first extraction pass silently dropped all 53 `<Item>` clauses** from the
+refund policy and terms — the regex only captured `<P>` paragraphs. Caught by
+comparing item counts against `grep -c '<Item'` in the source. If this content
+is ever regenerated, check the counts again.
+
+**Tax & Shipping** was an HTML `<table>` on the web; on a phone that needs
+horizontal scrolling, so each weight band is a card with its figures stacked.
+
+**`PaymentReturn` never claims a success it cannot verify.** The gateway is the
+authority on the result and nothing is written client-side; a redirect carrying
+no status is reported as *pending*, not success.
 
 ## Phase 13 — Native config & build ⛔ do not start until 0–12 are done
 
