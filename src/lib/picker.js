@@ -69,3 +69,35 @@ export const pickImage = (options = {}) =>
       { cancelable: true, onDismiss: () => resolve(null) },
     );
   });
+
+/* ─── Cropping ───
+ *
+ * The web shipped a 182-line ImageCropModal: a source <img>, four darkening
+ * bands, a rule-of-thirds grid and eight pointer-driven drag handles, all
+ * feeding canvas.drawImage + canvas.toDataURL. Every platform here already
+ * has a native cropper that people know how to use, so that whole component
+ * is replaced by this call rather than reimplemented with PanResponder.
+ *
+ * Used by the image-search re-crop loop on the Collection screen.
+ */
+export const cropImage = async (uri, options = {}) => {
+  /* Imported lazily: the crop picker pulls in a sizeable native bridge and
+     the vast majority of sessions never crop anything. */
+  const ImageCropPicker = require('react-native-image-crop-picker').default;
+  try {
+    const result = await ImageCropPicker.openCropper({
+      path: uri,
+      mediaType: 'photo',
+      freeStyleCropEnabled: true,
+      cropperToolbarTitle: 'Crop to search',
+      compressImageQuality: 0.9,
+      ...options,
+    });
+    return { uri: result.path, type: result.mime, width: result.width, height: result.height };
+  } catch (e) {
+    /* The cropper rejects on cancel rather than resolving — not an error. */
+    if (String(e?.message || '').toLowerCase().includes('cancel')) return null;
+    if (e?.code === 'E_PICKER_CANCELLED') return null;
+    throw e;
+  }
+};

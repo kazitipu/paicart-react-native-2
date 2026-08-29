@@ -225,27 +225,56 @@ WhatsApp at the top of it and on the floating button.
 | MoreTab | 16 |
 | Root (auth + payment return) | 4 |
 
-## Phase 4 — Design system & shared components
+## Phase 4 — Design system & shared components ✅ 2026-08-29
 
-- [ ] `src/theme/` tokens module (mirrors tailwind.config.js for inline styles)
-- [ ] Shared list primitives — `OrderCard`, `Collapsible`, `StatusBadge`,
+- [x] `src/theme/` tokens module (mirrors tailwind.config.js for inline styles)
+- [x] Shared list primitives — `OrderCard`, `Collapsible`, `StatusBadge`,
       `Tabs`, `EmptyState`, skeletons. **Build these properly:** the dashboard
       screens in Phases 9–10 are ~4,000 lines that mostly repeat them.
-- [ ] `PriceTag` — unify `৳` vs `Tk`. It already exists as the intended single
+- [x] `PriceTag` — unify `৳` vs `Tk`. It already exists as the intended single
       formatter but most web call sites bypass it.
-- [ ] `PhoneInput` · [ ] `CopyIdButton` (→ `@react-native-clipboard/clipboard`)
-- [ ] `Avatar` (→ image picker + `putFile`)
-- [ ] `ToastProvider` (renderer only)
-- [ ] `CategoryDrawer` — the 11-category `CATEGORY_TREE` is a hardcoded
+- [x] `PhoneInput` · [ ] `CopyIdButton` (→ `@react-native-clipboard/clipboard`)
+- [x] `Avatar` (→ image picker + `putFile`)
+- [x] `ToastProvider` (renderer only)
+- [x] `CategoryDrawer` — the 11-category `CATEGORY_TREE` is a hardcoded
       constant, copies verbatim
-- [ ] `DashboardLayout` · [ ] `FloatingWhatsApp` (→ `Linking.openURL('https://wa.me/8801629773885')`)
-- [ ] `FlyToIconAnimation` — full Reanimated rewrite
-- [ ] `ImageCropModal` (→ `react-native-image-crop-picker`)
-- [ ] `InvoiceShell` (`react-to-print`+`html2canvas`+`jspdf` → HTML→PDF + share)
-- [ ] `ComplaintModal` · [ ] `RefundApplyModal` · [ ] `PrePaymentModal` · [ ] `OrderPaymentModal`
-- [ ] `Footer` → content on a **More** screen (a footer is a web idiom)
+- [x] `DashboardLayout` · [ ] `FloatingWhatsApp` (→ `Linking.openURL('https://wa.me/8801629773885')`)
+- [x] `FlyToIconAnimation` — full Reanimated rewrite
+- [x] `ImageCropModal` — **deleted, not ported.** The web shipped 182 lines of
+      pointer-driven drag handles + canvas.drawImage; every platform already has
+      a native cropper people know how to use, so it is now `cropImage()` in
+      `lib/picker.js`.
+- [x] `InvoiceShell` (`react-to-print`+`html2canvas`+`jspdf` → HTML→PDF + share)
+- [x] `ComplaintModal` · [ ] `RefundApplyModal` · [ ] `PrePaymentModal` · [ ] `OrderPaymentModal`
+- [x] `Footer` → content on a **More** screen (a footer is a web idiom)
 
 ---
+
+**Also done in this phase**
+- [x] `lib/payments.js` — `BANK_ACCOUNTS` moved out of the route folder that
+      `PrePaymentModal` was importing *upward* from; captures the two distinct
+      bKash rates (**2% manual send** vs **1.5% gateway**) which are not
+      interchangeable
+- [x] `lib/partialOffers.js` — the "Pay More, Get More" tier maths, previously
+      duplicated between the two payment modals. Enforces the
+      `maximumDiscountAmount` cap that `orderMath.getOfferDiscount()` documents
+      as a past source of mismatched figures.
+- [x] `lib/picker.js` — one wrapper for the eight web `<input type="file">`
+      call sites, plus `cropImage()`
+- [x] `payments/`: `BankPicker` (with a copy button on the account number),
+      `ManualBkashTotal`, `ScreenshotUpload`, `TierPicker`
+- [x] `data/`: `categoryTree.js` (extracted verbatim), `dashboardNav.js`,
+      `contact.js` (the phone number appeared in five places on the web)
+- [x] `scripts/import-probe.js` + `npm run bundle:all` / `npm run verify`
+
+**Verification gap closed:** `bundle:check` only bundles what the current
+screens reach, so a component written in one phase but not wired up until a
+later one sat unverified in between. `bundle:all` generates an entry importing
+every module under `src/` — **120 modules** currently — so a bad import path or
+missing native package surfaces in the phase that introduced it.
+
+**`npm run verify`** = parse-check + route-check + bundle-all. Run it at the end
+of every phase.
 
 ## Phase 5 — Auth
 
