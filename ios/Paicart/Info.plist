@@ -55,5 +55,28 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Paicart uses the camera so you can photograph payment slips, waybills and product pictures for your orders.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Paicart needs access to your photos so you can attach payment slips, waybills and product pictures, and search for products by image.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Paicart saves invoices and product images you download to your photo library.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.paicart.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Carries the bKash gateway return, paicart://payment-return -->
+				<string>paicart</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>https</string>
+	</array>
 </dict>
 </plist>

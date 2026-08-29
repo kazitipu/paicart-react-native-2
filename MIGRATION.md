@@ -8,6 +8,13 @@ project (`paicart`)** with full feature parity.
 > the next depends on it. Tick `- [x]` as items land and stamp the phase heading
 > with a date. A resumed session should read this file first and continue from
 > the first unticked box, not restart.
+>
+> ## Status: Phases 0–12 complete. All 52 screens ported.
+>
+> The only unticked work is in **Phase 13**, and three of its items are blocked
+> on things only the project owner can do (registering the apps in the Firebase
+> console, the Google web client id, and the Firestore indexes). Run
+> `npm run verify` before and after any change.
 
 **Do not run an Android or iOS build until Phase 13.** Builds are slow; the
 whole port is verified by Metro bundling (`npm run bundle:check`) until then.
@@ -603,20 +610,46 @@ horizontal scrolling, so each weight band is a card with its figures stacked.
 authority on the result and nothing is written client-side; a redirect carrying
 no status is reported as *pending*, not success.
 
-## Phase 13 — Native config & build ⛔ do not start until 0–12 are done
+## Phase 13 — Native config & build
 
-- [ ] Register Android (`com.paicart.app`) + iOS apps in the **existing
-      `paicart` Firebase project**
-- [ ] Add `google-services.json` + `GoogleService-Info.plist`
-- [ ] Permissions (camera, photo library)
-- [ ] `usesCleartextTraffic` / ATS for any surviving `http:` image URLs
-- [ ] Deep-link intent filters + associated domains
-- [ ] App icons + `react-native-bootsplash`
-- [ ] Create the Firestore composite indexes for the stat-count aggregations
-- [ ] **Android build** (`npx react-native run-android`)
-- [ ] iOS build — blocked until macOS ≥14 + Xcode ≥16
+Configuration is **done**; the build is not, by instruction. The three items
+below are blocked on things only you can do, then Android is one command.
 
----
+### Done in code
+- [x] Android permissions — `CAMERA`, `READ_MEDIA_IMAGES` (Android 13+), and
+      `READ_EXTERNAL_STORAGE` capped at API 32 for older devices
+- [x] `<queries>` for `https` VIEW intents, so WhatsApp hand-off and supplier
+      document links resolve on Android 11+
+- [x] Deep-link intent filters: the `paicart://` scheme (which carries
+      `paicart://payment-return`) and `https://paicart.com` /
+      `https://www.paicart.com` with `autoVerify`
+- [x] `com.google.gms:google-services` plugin wired into both gradle files
+- [x] iOS `Info.plist` — camera / photo-library / photo-add usage strings,
+      the `paicart` URL scheme, and `LSApplicationQueriesSchemes`
+- [x] `usesCleartextTraffic` is already templated; `cdn()` forces `https:`
+      anyway, so no HTTP image should reach the network layer
+
+### Blocked on you
+- [ ] **Register the apps in the existing `paicart` Firebase project.**
+      Android package **`com.paicart.app`**, iOS bundle **`com.paicart.app`**.
+      Drop `google-services.json` into `android/app/` and
+      `GoogleService-Info.plist` into `ios/Paicart/`. **Nothing Firebase works
+      until this is done** — the config is read from those files, not from the
+      hardcoded object the web used (that one carries a `:web:` appId).
+- [ ] **Google Sign-In web client id.** Take the *web* OAuth client id from the
+      Firebase console (not the Android one — Firebase validates the ID token
+      against it, and an Android id fails with a confusing audience mismatch)
+      and pass it to `configureGoogleSignin()` at startup.
+- [ ] **Firestore composite indexes** for the dashboard stat counts
+      (`getOrderStatCounts` / `getShipStatCounts` use `getCountFromServer`):
+      `ordersApi` on (userId + paymentStatus), (userId + shipmentStatusScore),
+      (userId + paymentStatus + orderStatus); `shipForMe` likewise. Firestore
+      will print a ready-made index link the first time each query runs.
+
+### Then
+- [ ] App icons and `react-native-bootsplash` assets
+- [ ] `npx react-native run-android`
+- [ ] iOS — blocked until macOS ≥14 + Xcode ≥16 (see the constraint above)
 
 ## Verification
 
