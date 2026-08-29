@@ -1,0 +1,15 @@
+import './global.css';
+import React from 'react';
+import { View, Text } from 'react-native';
+import store from '@/store';
+import * as actions from '@/store/actions';
+import * as fu from '@/lib/firebaseUtils';
+import * as cdn from '@/lib/cdn';
+import * as iu from '@/lib/imageUtils';
+import * as om from '@/lib/orderMath';
+export default function App() {
+  const n = Object.keys(store.getState()).length + Object.keys(actions).length +
+            Object.keys(fu).length + Object.keys(cdn).length +
+            Object.keys(iu).length + Object.keys(om).length;
+  return <View><Text>{n}</Text></View>;
+}

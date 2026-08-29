@@ -1,4 +1,4 @@
-package com.paicart
+package com.paicart.app
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

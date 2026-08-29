@@ -1,0 +1,102 @@
+export const getSingleShopTotal = (order) => {
+  let total = 0;
+  order.items?.forEach(item =>
+    item.skus?.forEach(sku => {
+      total += parseInt(parseFloat(sku.price || 0) * parseInt(sku.totalQuantity || 0));
+    })
+  );
+  return total;
+};
+
+export const getTotalPaid = (order) => {
+  if (!order.payments?.length) return 0;
+  return order.payments.reduce((a, p) => a + parseInt(p.amount || 0), 0);
+};
+
+/* The "pay now %" bonus, as an amount. `offer` is a plain number (20) —
+   parseFloat also copes with the legacy "20%" strings written before this was
+   standardised. Without subtracting it the balance kept billing the full
+   amount even though the customer was granted the discount. */
+export const getOfferDiscount = (order) => {
+  /* The amount granted at payment time is authoritative. Recomputing
+     base × offer% ignores the offer's `maximumDiscountAmount` cap, so a capped
+     discount was shown as its full uncapped value here while the payment
+     modal (which applies the cap) showed the real, smaller figure. Only fall
+     back to recomputing for older records that predate this field. */
+  const stored = parseFloat(order?.offerDiscountAmount);
+  if (Number.isFinite(stored) && stored > 0) return Math.round(stored);
+  const pct = parseFloat(order?.offer) || 0;
+  const base = parseInt(order?.actualTotalAfterCoupon) || 0;
+  if (pct <= 0 || base <= 0) return 0;
+  return Math.round(base * (pct / 100));
+};
+
+export const getTotalDue = (order) => {
+  const totalPaid = getTotalPaid(order);
+  const goods = order.orderTotal ? parseInt(order.orderTotal) : getSingleShopTotal(order);
+  const offerAmt = getOfferDiscount(order);
+  let totalBill;
+  if (order.shippingChargeCustomer && parseInt(order.shippingChargeCustomer) !== 0) {
+    totalBill = goods
+      + parseInt(order.shippingChargeCustomer || 0)
+      + parseInt(order.localShipping || 0)
+      + parseInt(order.otherCost || 0)
+      - parseInt(order.discount || 0);
+  } else {
+    totalBill = goods
+      + parseInt(order.localShipping || 0)
+      + parseInt(order.otherCost || 0)
+      - parseInt(order.discount || 0);
+  }
+  return parseInt(totalBill) - offerAmt - totalPaid;
+};
+
+export const getGoodsTotal = (order) =>
+  order.actualTotal ? parseInt(order.actualTotal)
+  : (order.orderTotal ? parseInt(order.orderTotal) : getSingleShopTotal(order));
+
+export const canPayOrder = (order) => {
+  const isRejected = (order.orderStatus || '').toLowerCase() === 'reject';
+  return !isRejected
+    && order.paymentStatus !== 'Paid'
+    && order.paymentStatus !== 'pending'
+    && getTotalDue(order) > 0;
+};
+
+/* ── Which tab an order belongs in ──
+   One bucket per order, evaluated in priority order, so tabs can never
+   overlap or leave an order homeless. Driven by the concrete fields that
+   actually change during the journey rather than by score alone:
+
+     To Pay      Not Paid, Pending Payment          (payment timeout → Rejected)
+     To Ship     Paid / Partially Paid, until a tracking number exists
+     In Shipment tracking number generated → CN warehouse → ready for
+                 flight/vessel → on board → BD customs → customs released
+     To Receive  weight updated / invoice generated / payment due / received
+     Delivered   delivered
+     Rejected    payment timeout, or cancelled by user or admin
+
+   Refunds is deliberately not here: it is a cross-cutting flag an order can
+   carry while sitting in any of the buckets above. */
+export const getOrderBucket = (order) => {
+  const pay = (order?.paymentStatus || '').toLowerCase();
+  const st = (order?.orderStatus || '').toLowerCase();
+  const score = parseInt(order?.shipmentStatusScore) || 1;
+
+  if (st === 'reject') return 'Rejected';
+  if (score >= 7 || st === 'delivered') return 'Delivered';
+
+  /* The parcel is in Bangladesh and the final bill is being settled — weight
+     taken, invoice raised, payment due or received against it. */
+  if (score >= 6 || !!order?.receivedWeight || parseInt(order?.shippingChargeCustomer) > 0)
+    return 'To Receive';
+
+  /* A tracking number is the moment it stops being "waiting to ship". */
+  if (order?.trackingNo) return 'In Shipment';
+
+  if (pay === 'paid' || pay === 'partially paid') return 'To Ship';
+
+  /* Not Paid and Pending Payment both sit here — a payment awaiting review is
+     still money the customer has committed but the order has not banked. */
+  return 'To Pay';
+};
