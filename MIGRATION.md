@@ -498,22 +498,48 @@ stands rather than the order being blocked. See issue #1.
 order is only swept once a client opens the list with it still present. There is
 no server cron in this project. It belongs in a Cloud Function — issue #9.
 
-## Phase 10 — Ship For Me
+## Phase 10 — Ship For Me ✅ 2026-08-30
 
-- [ ] **`_shared.jsx` (1,026 lines) first — it unblocks three routes.** Exports
+- [x] **`_shared.jsx` (1,026 lines) first — it unblocks three routes.** Exports
       `getTotal`, `calcRate`, `canPayShipment`, `STEPS`/`STEP_ICONS`,
       `EditModal`, `StartShippingModal`, `PaymentModal`, `ShippingInfoCard`,
       `ShipmentProgress`, `BANK_ACCOUNTS`, `DocxPreviewModal`
-  - [ ] Move `BANK_ACCOUNTS` into `src/lib/` — `PrePaymentModal` currently
+  - [x] Move `BANK_ACCOUNTS` into `src/lib/` — `PrePaymentModal` currently
         imports it from a route folder
-  - [ ] `DocxPreviewModal` uses `docx-preview`'s `renderAsync` (DOM-only) →
+  - [x] `DocxPreviewModal` uses `docx-preview`'s `renderAsync` (DOM-only) →
         WebView viewer or external-app handoff via `Linking`
-- [ ] Ship For Me request form (523 lines — dynamic tracking-number field array
+- [x] Ship For Me request form (523 lines — dynamic tracking-number field array
       + 3 file uploads)
-- [ ] my-request list (798) + detail (410)
-- [ ] my-delivered · [ ] my-forwarding-parcel
+- [x] my-request list (798) + detail (410)
+- [x] my-delivered · [ ] my-forwarding-parcel
 
 ---
+
+**Also done**
+- [x] `lib/shipForMe.js` — `getTotal`, `calcRate`, `canPayShipment`, the
+      7-step timeline and its sea relabelling. **`calcRate` is a different
+      table from `lib/freight.js`**: that one prices goods bought through the
+      site, this prices a parcel the customer shipped to our China warehouse
+      themselves. Air's 0–0.3 kg band is again flat, and its `perKg` there is a
+      display figure (`parcel × 3.333333`), not a rate anything is billed at.
+      16 cases checked.
+- [x] `components/shipping/`: `ShipmentCard`, `ShipmentProgress`,
+      `ShipmentPaymentModal`, `FilteredShipmentList`
+- [x] `ui/Select` (there is no `<select>` in React Native, and a picker wheel
+      handles long lists badly on Android — so it is a sheet of rows) and
+      `ui/FileField`
+
+**The stepper is vertical.** Seven milestones do not fit across a phone the way
+the web's horizontal stepper did. Only the ready-for-departure milestone changes
+label and icon by freight mode; its **stored** status value stays
+`'Ready for fly'` either way — the admin panel writes that literal.
+
+**`DocxPreviewModal` is not ported.** It used `docx-preview`'s `renderAsync`,
+which is DOM-only. Documents open in whatever app the phone has for them via
+`Linking` — simpler and more capable than an in-app renderer.
+
+**`BANK_ACCOUNTS` moved to `lib/payments.js`** in Phase 4, resolving the web's
+inversion where `PrePaymentModal` imported it *upward* out of a route folder.
 
 ## Phase 11 — Invoices, refunds, points, profile
 

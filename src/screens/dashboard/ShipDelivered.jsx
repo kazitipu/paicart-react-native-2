@@ -1,7 +1,14 @@
 import React from 'react';
-import ScreenStub from '@/components/ScreenStub';
+import FilteredShipmentList from '@/components/shipping/FilteredShipmentList';
+import { isDeliveredRecord } from '@/lib/refund';
 
-/* TODO: port from ../paicart-nextjs15 — see MIGRATION.md. */
-export default function ShipDelivered(props) {
-  return <ScreenStub name="ShipDelivered" route={props.route} />;
+export default function ShipDelivered() {
+  return (
+    <FilteredShipmentList
+      title="Delivered Shipments"
+      predicate={isDeliveredRecord}
+      emptyTitle="Nothing delivered yet"
+      emptySubtitle="Completed shipments will appear here."
+    />
+  );
 }
