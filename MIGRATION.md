@@ -276,19 +276,44 @@ missing native package surfaces in the phase that introduced it.
 **`npm run verify`** = parse-check + route-check + bundle-all. Run it at the end
 of every phase.
 
-## Phase 5 — Auth
+## Phase 5 — Auth ✅ 2026-08-29
 
-- [ ] Split web `login/page.jsx` (604 lines) → Login / Register / OTP screens
+- [x] Split web `login/page.jsx` (604 lines) → Login / Register / OTP screens
       sharing a tab header
-- [ ] Google sign-in via `@react-native-google-signin`
-- [ ] OTP against `https://paicart.com/api/v1/otp-sms-send/{phone}`, ported as-is
-  - [ ] **Fix the un-awaited `verifyOtpRedux`** — today it toasts "OTP verified!"
+- [x] Google sign-in via `@react-native-google-signin`
+- [x] OTP against `https://paicart.com/api/v1/otp-sms-send/{phone}`, ported as-is
+  - [x] **Fix the un-awaited `verifyOtpRedux`** — today it toasts "OTP verified!"
         and navigates even when the code is wrong
-- [ ] Forgot Password (web has two implementations — consolidate to one)
-- [ ] Change Password (`reauthenticateWithCredential` → `updatePassword`)
-- [ ] `returnTo` (a `useSearchParams` value on web) → navigation param
+- [x] Forgot Password (web has two implementations — consolidate to one)
+- [x] Change Password (`reauthenticateWithCredential` → `updatePassword`)
+- [x] `returnTo` (a `useSearchParams` value on web) → navigation param
 
 ---
+
+**Screens:** `auth/Login` (Sign In / Register / Phone tabs in one screen, as on
+the web), `auth/Register` (kept as a route so old links resolve — opens Login on
+its Register tab instead of dropping people on Sign In), `auth/ForgotPassword`,
+`dashboard/UserSecurity`.
+
+**Also done**
+- [x] `ui/Field` — labelled input with show/hide password
+- [x] `ui/OtpBoxes` — six boxes with `autoComplete="sms-otp"` /
+      `textContentType="oneTimeCode"` so the keyboard offers the code straight
+      from the SMS, plus paste-spreading and backspace traversal
+
+**The OTP bug, fixed.** The web did `dispatch(verifyOtpRedux(...))` without
+awaiting it, then toasted "OTP verified!" and navigated — **a wrong code still
+let people in**. `verifyOtp` now returns null on both failure paths (expired /
+incorrect), `verifyOtpRedux` resolves false and no longer overwrites the current
+user, and the screen awaits it. The underlying security weakness is unchanged
+and remains issue #3 below, by decision.
+
+**Google cancellation** is not an error: `signInWithGoogle` resolves null when
+the sheet is dismissed, and the screen neither toasts nor navigates.
+
+**Password change** is unavailable to phone-OTP users — those sessions are
+anonymous and carry no email, so there is no credential to reauthenticate with.
+The screen says so rather than failing obscurely.
 
 ## Phase 6 — Storefront browse
 
