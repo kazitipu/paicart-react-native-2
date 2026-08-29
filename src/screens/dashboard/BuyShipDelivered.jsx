@@ -1,7 +1,17 @@
 import React from 'react';
-import ScreenStub from '@/components/ScreenStub';
+import FilteredOrderList from '@/components/orders/FilteredOrderList';
+import { getOrderBucket } from '@/lib/orderMath';
 
-/* TODO: port from ../paicart-nextjs15 — see MIGRATION.md. */
-export default function BuyShipDelivered(props) {
-  return <ScreenStub name="BuyShipDelivered" route={props.route} />;
+export default function BuyShipDelivered() {
+  return (
+    <FilteredOrderList
+      title="Delivered"
+      /* The web filtered on `status === 'Delivered'`, which missed orders that
+         reached shipmentStatusScore 7 without the string being written.
+         getOrderBucket handles both. */
+      predicate={(o) => getOrderBucket(o) === 'Delivered'}
+      emptyTitle="Nothing delivered yet"
+      emptySubtitle="Completed orders will appear here."
+    />
+  );
 }

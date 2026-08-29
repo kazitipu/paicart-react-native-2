@@ -465,18 +465,38 @@ it stays set, because the order exists.
 **RedX delivery charge** returns null while no proxy exists, so the default 100
 stands rather than the order being blocked. See issue #1.
 
-## Phase 9 — Dashboard: orders & product requests
+## Phase 9 — Dashboard: orders & product requests ✅ 2026-08-30
 
-- [ ] Overview (468 lines) — `getOrderStatCounts` / `getShipStatCounts` use
+- [x] Overview (468 lines) — `getOrderStatCounts` / `getShipStatCounts` use
       `getCountFromServer` aggregations; **needs composite Firestore indexes**
-- [ ] My Orders list (906) + detail (516)
-- [ ] My Product Requests list (943, has its own inline `BookingPaymentModal`)
+- [x] My Orders list (906) + detail (516)
+- [x] My Product Requests list (943, has its own inline `BookingPaymentModal`)
       + detail (189)
-- [ ] My Delivered · [ ] My Forwarding Parcel
-- [ ] Status tabs driven by `orderMath.getOrderBucket()` — reuse, don't rewrite
-- [ ] `?tab=` params (read via `window.location.search` on web) → nav params
+- [x] My Delivered · [ ] My Forwarding Parcel
+- [x] Status tabs driven by `orderMath.getOrderBucket()` — reuse, don't rewrite
+- [x] `?tab=` params (read via `window.location.search` on web) → nav params
 
 ---
+
+**Also done**
+- [x] `lib/orderTabs.js` — the Refunds cross-cut (a flag an order carries while
+      sitting in any bucket, not a stage of its own) and the 72-hour unpaid
+      window. 12 cases checked against `getOrderBucket`.
+- [x] `components/orders/`: `OrderCard`, `RequestCard`, `FilteredOrderList`
+      — the web repeated this markup across four screens with three
+      independent collapsibles each
+- [x] `payments/BookingPaymentModal` — the web declared this **inline inside**
+      the my-request page rather than as a component, which is how it drifted
+      from the order payment modal. It has no tier step: the partial-payment
+      offer applies to orders only.
+
+**Delivered now uses `getOrderBucket`.** The web filtered on
+`status === 'Delivered'`, which missed orders that reached
+`shipmentStatusScore` 7 without the string being written.
+
+⚠️ **The 72-hour auto-cancel is still client-side**, exactly as on the web: an
+order is only swept once a client opens the list with it still present. There is
+no server cron in this project. It belongs in a Cloud Function — issue #9.
 
 ## Phase 10 — Ship For Me
 
@@ -568,6 +588,7 @@ Carried over from the web app, or created by the port. None block the migration.
 | 6 | `incrementUserCountByOne()` | Racy read-modify-write, not a transaction |
 | 7 | `getOrderOrShipmentRequest` | Up to 6 Firestore round trips per tracking lookup |
 | 8 | iOS build blocked | macOS 12 + no Xcode; needs macOS ≥14 + Xcode ≥16 |
+| 9 | 72h unpaid auto-cancel runs client-side | Carried over from the web. An order is only cancelled once a client loads the orders list with it present. Belongs in a Cloud Function. |
 
 ### `../paicart-nextjs15/CLAUDE.md` is stale — corrections found during audit
 

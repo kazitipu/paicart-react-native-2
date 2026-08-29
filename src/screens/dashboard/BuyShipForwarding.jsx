@@ -1,7 +1,13 @@
 import React from 'react';
-import ScreenStub from '@/components/ScreenStub';
+import FilteredOrderList from '@/components/orders/FilteredOrderList';
 
-/* TODO: port from ../paicart-nextjs15 — see MIGRATION.md. */
-export default function BuyShipForwarding(props) {
-  return <ScreenStub name="BuyShipForwarding" route={props.route} />;
+export default function BuyShipForwarding() {
+  return (
+    <FilteredOrderList
+      title="Forwarding Parcel"
+      predicate={(o) => o.status === 'Forwarding' || !!o.forwardingParcel}
+      emptyTitle="No forwarding parcels"
+      emptySubtitle="Parcels being forwarded will appear here."
+    />
+  );
 }
