@@ -315,21 +315,45 @@ the sheet is dismissed, and the screen neither toasts nor navigates.
 anonymous and carry no email, so there is no credential to reauthenticate with.
 The screen says so rather than failing obscurely.
 
-## Phase 6 — Storefront browse
+## Phase 6 — Storefront browse ✅ 2026-08-29
 
-- [ ] **Home** (774 lines) — banner carousel, campaign cards, services row,
+- [x] **Home** (774 lines) — banner carousel, campaign cards, services row,
       ~40-icon category grid, N independent `CategorySection` fetches
       (`GET alg.com.bd/api/products/search`, 12s timeout, **2 retries with 1.5s
       backoff — keep the retry logic**), trust bar, Bengali FAQ accordion
-- [ ] **Collection** (755 lines) — tri-mode: keyword / vendor (`?shop_name=`) /
+- [x] **Collection** (755 lines) — tri-mode: keyword / vendor (`?shop_name=`) /
       image search (`id = img_uploads`). `IntersectionObserver` infinite scroll
       → `FlashList onEndReached`; keep the Redux result cache and scroll
       restoration; crop-and-re-search loop via the picker.
-- [ ] **Search** (191 lines) — Taobao keyword search against **`alglimited.com`**
+- [x] **Search** (191 lines) — Taobao keyword search against **`alglimited.com`**
       (a different host from the rest of the app); `react-infinite-scroll-component`
       → `FlashList`
 
 ---
+- [x] **Wishlist** — also ported here since it reuses the same grid
+
+**Also done**
+- [x] `lib/api.js` — every non-Firebase endpoint in one module. On the web
+      these were inline at ~20 call sites, which is how the Taobao search ended
+      up on a different host without anyone noticing and how a bearer token
+      ended up in a page component. Carries `getWithRetry` (2 retries, 1.5s
+      apart) that the homepage shelves depend on.
+- [x] `components/ProductCard.jsx` — the tile was redeclared in three web
+      files, which is why the wishlist heart behaved differently on each
+- [x] `components/SearchBar.jsx` — text + image search, including the 35-char
+      keyword-vs-URL cut-off and `get1688ProductId` (`?offerId=` / `/123.html`)
+- [x] `data/homeContent.js` — extracted verbatim: 8 Bengali FAQs, 14
+      prohibited-goods entries, 16 quick categories, 6 product shelves
+
+**Not carried over from the web Header:** the typewriter placeholder (it wrote
+`el.placeholder` directly to dodge re-rendering 15 icons per keystroke) and the
+scroll-hide behaviour (it set `dataset` attributes on the header element).
+Neither has a native analogue worth reproducing.
+
+**`REDX_PROXY_BASE` is deliberately `null`.** The RedX courier calls degrade to
+a default rather than embedding the hardcoded bearer token the web page carried
+— an APK is trivially unpacked and the token cannot be rotated without a store
+release. See issue #1.
 
 ## Phase 7 — Product detail ⭐ largest single item
 
