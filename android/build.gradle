@@ -4,7 +4,14 @@ buildscript {
         minSdkVersion = 24
         compileSdkVersion = 37
         targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"
+        /* The template asks for 27.1.12297006, which is not installed here and
+           whose ~700MB download kept being cut off mid-transfer, leaving a
+           corrupt stub that failed AGP's [CXX1101] validation. 28.0.12674087
+           is already present and complete. This matters because four
+           autolinked modules do compile C++ from source — nitro-modules,
+           mmkv, screens and gesture-handler — so the NDK is genuinely used,
+           not merely validated. */
+        ndkVersion = "28.0.12674087"
         kotlinVersion = "2.2.0"
     }
     repositories {

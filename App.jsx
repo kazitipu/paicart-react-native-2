@@ -5,6 +5,7 @@ import { StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
+import BootSplash from 'react-native-bootsplash';
 import Providers from '@/components/Providers';
 import { configureGoogleSignin } from '@/lib/firebase';
 import RootNavigator from '@/navigation/RootNavigator';
@@ -26,6 +27,10 @@ export default function App() {
           <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
           <NavigationContainer
             linking={linking}
+            /* onReady fires once the container has mounted and `linking` has
+               resolved any launch URL, so the splash covers the deep-link
+               hand-off too rather than flashing the wrong screen first. */
+            onReady={() => BootSplash.hide({ fade: true })}
             theme={{
               dark: false,
               colors: {

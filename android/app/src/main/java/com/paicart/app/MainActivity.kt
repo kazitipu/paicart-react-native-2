@@ -1,9 +1,12 @@
 package com.paicart.app
 
+import android.os.Bundle
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
+import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
+import com.zoontek.rnbootsplash.RNBootSplash
 
 class MainActivity : ReactActivity() {
 
@@ -19,4 +22,16 @@ class MainActivity : ReactActivity() {
    */
   override fun createReactActivityDelegate(): ReactActivityDelegate =
       DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
+
+  /**
+   * Both calls must happen before super.onCreate. The fragment factory is
+   * required by react-native-screens >= 4.16 so restored fragments are built
+   * by the library rather than the default factory; RNBootSplash.init installs
+   * the splash theme so it is painted from the very first frame.
+   */
+  override fun onCreate(savedInstanceState: Bundle?) {
+    supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
+    RNBootSplash.init(this, R.style.BootTheme)
+    super.onCreate(savedInstanceState)
+  }
 }

@@ -21,45 +21,53 @@
     </queries>
 
     <application
-      android:name=".MainApplication"
-      android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
-      android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
-      <activity
-        android:name=".MainActivity"
+        android:name=".MainApplication"
         android:label="@string/app_name"
-        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
-        android:launchMode="singleTask"
-        android:windowSoftInputMode="adjustResize"
-        android:exported="true">
-        <intent-filter>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="android.intent.category.LAUNCHER" />
-        </intent-filter>
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:supportsRtl="true">
+        <!-- android:theme is BootTheme, not AppTheme: it draws the splash from
+             the first frame, then BootSplash.hide() swaps in postBootSplashTheme
+             (AppTheme). See res/values/styles.xml. -->
+        <activity
+            android:name=".MainActivity"
+            android:label="@string/app_name"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="true"
+            android:theme="@style/BootTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
 
-        <!-- Custom scheme. Also carries the bKash gateway's return URL,
-             paicart://payment-return - see lib/payments.js. -->
-        <intent-filter>
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.DEFAULT" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="paicart" />
-        </intent-filter>
+            <!-- Custom scheme. Also carries the bKash gateway's return URL,
+                 paicart://payment-return - see lib/payments.js. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="paicart" />
+            </intent-filter>
 
-        <!-- Existing paicart.com links open in the app. Requires
-             /.well-known/assetlinks.json on the domain to skip the chooser;
-             without it Android still offers the app, it just asks first. -->
-        <intent-filter android:autoVerify="true">
-            <action android:name="android.intent.action.VIEW" />
-            <category android:name="android.intent.category.DEFAULT" />
-            <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="paicart.com" />
-            <data android:scheme="https" android:host="www.paicart.com" />
-        </intent-filter>
-      </activity>
+            <!-- Existing paicart.com links open in the app. Requires
+                 /.well-known/assetlinks.json on the domain to skip the chooser;
+                 without it Android still offers the app, it just asks first. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="paicart.com" />
+                <data
+                    android:scheme="https"
+                    android:host="www.paicart.com" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

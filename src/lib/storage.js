@@ -10,9 +10,11 @@
  * JSON helpers live here so callers never hand-roll try/catch around a parse —
  * a corrupt value should degrade to "no value", never crash the app.
  */
-import { MMKV } from 'react-native-mmkv';
+/* v4 of the library dropped the `MMKV` runtime class - it is a type-only
+   export now - and instances come from the `createMMKV` factory instead. */
+import { createMMKV } from 'react-native-mmkv';
 
-export const storage = new MMKV({ id: 'paicart' });
+export const storage = createMMKV({ id: 'paicart' });
 
 export const getString = (key) => {
   try {

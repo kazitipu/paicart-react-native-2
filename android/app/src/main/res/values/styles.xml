@@ -6,4 +6,15 @@
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     </style>
 
+    <!-- The launch theme. Theme.BootSplash backports the Android 12
+         SplashScreen API, so one definition covers every API level we support:
+         12+ gets the platform splash, older releases get an equivalent window
+         background. MainActivity starts on this and BootSplash.hide() hands
+         over to postBootSplashTheme. -->
+    <style name="BootTheme" parent="Theme.BootSplash">
+        <item name="bootSplashBackground">@color/bootsplash_background</item>
+        <item name="bootSplashLogo">@drawable/bootsplash_logo</item>
+        <item name="postBootSplashTheme">@style/AppTheme</item>
+    </style>
+
 </resources>

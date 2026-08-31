@@ -9,15 +9,19 @@ project (`paicart`)** with full feature parity.
 > with a date. A resumed session should read this file first and continue from
 > the first unticked box, not restart.
 >
-> ## Status: Phases 0–12 complete. All 52 screens ported.
+> ## Status: Phases 0–13 complete for Android. All 52 screens ported.
 >
-> The only unticked work is in **Phase 13**, and three of its items are blocked
-> on things only the project owner can do (registering the apps in the Firebase
-> console, the Google web client id, and the Firestore indexes). Run
-> `npm run verify` before and after any change.
+> The Android debug build installs and boots on an emulator (2026-08-31). What
+> remains is **iOS** (blocked on hardware), **Firestore composite indexes**,
+> **app icons / bootsplash assets**, and the **Verification step 3** critical-path
+> walkthrough — which has not been done and is now the highest-value work left.
+> Run `npm run verify` before and after any change.
 
-**Do not run an Android or iOS build until Phase 13.** Builds are slow; the
-whole port is verified by Metro bundling (`npm run bundle:check`) until then.
+**The bundle check is necessary but not sufficient.** `npm run bundle:check`
+proves the module graph resolves; it does **not** execute module bodies, so it
+cannot catch a native-module API that no longer exists. The first real build
+crashed on exactly that (see Known issues #10). Boot the app on a device after
+touching anything that talks to a native module.
 
 ---
 
@@ -665,8 +669,30 @@ below are blocked on things only you can do, then Android is one command.
       will print a ready-made index link the first time each query runs.
 
 ### Then
-- [ ] App icons and `react-native-bootsplash` assets
-- [ ] `npx react-native run-android`
+- [x] **App icons and `react-native-bootsplash`** (2026-08-31), both generated
+      from `branding/` — see that folder's README for the regeneration command.
+      Source mark is `#FF6A00`, the same as `colors.primary`.
+
+      *Icons.* Legacy `mipmap-*` (5 densities, square + round) **plus** an
+      adaptive icon for API 26+: `mipmap-anydpi-v26/ic_launcher{,_round}.xml`
+      over `drawable-*/ic_launcher_foreground.png`, a white
+      `@color/ic_launcher_background`, and a `<monochrome>` layer so Android 13
+      themed icons work. The foreground is sized so the mark's actual ink is
+      **64.2dp across on the 108dp canvas**, inside the 66dp guaranteed-safe
+      circle — verified against circle / squircle / rounded / square / teardrop
+      masks, since OEM launchers each pick their own. Do not scale it up: past
+      ~66dp the corners clip on circular masks.
+
+      *Splash.* `Theme.BootSplash` backports the Android 12 SplashScreen API, so
+      `BootTheme` in `styles.xml` covers every supported API level from one
+      definition. `MainActivity.onCreate` calls `RNScreensFragmentFactory()` —
+      required by react-native-screens >= 4.16 — then `RNBootSplash.init`, both
+      **before** `super.onCreate`. JS hides it from `NavigationContainer`'s
+      `onReady`, so the splash also covers deep-link resolution.
+      iOS assets and the storyboard are generated and registered in the
+      pbxproj, but are unverified — no Mac that can build iOS.
+- [x] `npx react-native run-android` — builds, installs and boots (2026-08-31).
+      Two things had to be fixed to get there; see Known issues #10 and #11.
 - [ ] iOS — blocked until macOS ≥14 + Xcode ≥16 (see the constraint above)
 
 ## Verification
@@ -678,7 +704,8 @@ manual), so verification is staged — which is why the build is deferred:
    resolves without a native build.
 2. **After Phase 2:** log the rehydrated store on cold start; confirm only
    `user` / `cartList` / `wishlist` persist.
-3. **After Phase 13:** walk the critical path against live Firebase —
+3. **After Phase 13 — NOT YET DONE, this is the main outstanding work.**
+   Walk the critical path against live Firebase —
    register/login (all three methods) → home → keyword search → image search →
    product detail → add to cart → place order → payment modal → order lands in
    My Orders in the right tab bucket → track order. Then ship-for-me submit →
@@ -704,6 +731,8 @@ Carried over from the web app, or created by the port. None block the migration.
 | 7 | `getOrderOrShipmentRequest` | Up to 6 Firestore round trips per tracking lookup |
 | 8 | iOS build blocked | macOS 12 + no Xcode; needs macOS ≥14 + Xcode ≥16 |
 | 9 | 72h unpaid auto-cancel runs client-side | Carried over from the web. An order is only cancelled once a client loads the orders list with it present. Belongs in a Cloud Function. |
+| 10 | **`react-native-mmkv` v4 API drift** — *fixed 2026-08-31* | `src/lib/storage.js` used `new MMKV({ id: 'paicart' })`. v4 removed the runtime class; `MMKV` is a **type-only** export and instances come from `createMMKV()`. `new undefined()` threw at module scope in `store/index.js`, so the app died before first paint. Bundling could not catch it. Now `createMMKV({ id: 'paicart' })`. |
+| 11 | **Emulator env, not a code bug** — install and dev-server gotchas | (a) Debug APK is 241 MB because `reactNativeArchitectures` lists all four ABIs; `installDebug` fails with `IOException: Requested internal only, but not enough space`. Use `run-android --active-arch-only`, and clear the orphaned `/data/local/tmp/app-debug.apk` a failed install leaves behind. (b) If the emulator enters Doze, netd firewalls the app uid (`blocked_state={blocked=DOZE}`) and it cannot reach Metro on `10.0.2.2:8081` — the app then dies with `Unable to load script`. `adb shell dumpsys deviceidle disable` plus `adb reverse tcp:8081 tcp:8081`. |
 
 ### `../paicart-nextjs15/CLAUDE.md` is stale — corrections found during audit
 
