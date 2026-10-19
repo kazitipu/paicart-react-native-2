@@ -57,46 +57,16 @@ export const getGoodsTotal = (order) =>
 
 export const canPayOrder = (order) => {
   const isRejected = (order.orderStatus || '').toLowerCase() === 'reject';
+  /* A fully refunded order is cancelled — its leftover "due" is not owed */
   return !isRejected
+    && !isFullyRefunded(order)
     && order.paymentStatus !== 'Paid'
     && order.paymentStatus !== 'pending'
     && getTotalDue(order) > 0;
 };
 
-/* ── Which tab an order belongs in ──
-   One bucket per order, evaluated in priority order, so tabs can never
-   overlap or leave an order homeless. Driven by the concrete fields that
-   actually change during the journey rather than by score alone:
+/* Tab rules live in buckets.js (a copy of the web repo's, shared with the
+   Cloud Function that stores each order's `bucket` for the dashboard). */
+import { isFullyRefunded } from './buckets';
 
-     To Pay      Not Paid, Pending Payment          (payment timeout → Rejected)
-     To Ship     Paid / Partially Paid, until a tracking number exists
-     In Shipment tracking number generated → CN warehouse → ready for
-                 flight/vessel → on board → BD customs → customs released
-     To Receive  weight updated / invoice generated / payment due / received
-     Delivered   delivered
-     Rejected    payment timeout, or cancelled by user or admin
-
-   Refunds is deliberately not here: it is a cross-cutting flag an order can
-   carry while sitting in any of the buckets above. */
-export const getOrderBucket = (order) => {
-  const pay = (order?.paymentStatus || '').toLowerCase();
-  const st = (order?.orderStatus || '').toLowerCase();
-  const score = parseInt(order?.shipmentStatusScore) || 1;
-
-  if (st === 'reject') return 'Rejected';
-  if (score >= 7 || st === 'delivered') return 'Delivered';
-
-  /* The parcel is in Bangladesh and the final bill is being settled — weight
-     taken, invoice raised, payment due or received against it. */
-  if (score >= 6 || !!order?.receivedWeight || parseInt(order?.shippingChargeCustomer) > 0)
-    return 'To Receive';
-
-  /* A tracking number is the moment it stops being "waiting to ship". */
-  if (order?.trackingNo) return 'In Shipment';
-
-  if (pay === 'paid' || pay === 'partially paid') return 'To Ship';
-
-  /* Not Paid and Pending Payment both sit here — a payment awaiting review is
-     still money the customer has committed but the order has not banked. */
-  return 'To Pay';
-};
+export { getOrderBucket, isFullyRefunded } from './buckets';

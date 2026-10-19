@@ -833,29 +833,30 @@ export const getAllWarehouses = async () => {
   }
 };
 
+/* Product-request payment. Throws on failure (like the order and shipment
+   versions below) so the modal shows an error instead of a false success.
+   The id must be a string: doc() throws on a number, which used to fail
+   every submission before anything was written. */
 export const uploadPaymentRequest2 = async (paymentObj) => {
-  const paymentRequestRef = doc(firestore, 'paymentRequestApi', paymentObj.paymentId);
+  const paymentRequestRef = doc(firestore, 'paymentRequestApi', String(paymentObj.paymentId));
   delete paymentObj.file;
   const snapShot = await getDoc(paymentRequestRef);
-  try {
-    if (!snapShot.exists()) {
-      await setDoc(paymentRequestRef, { ...paymentObj, productRequest: true });
-      for (const booking of paymentObj.productRequestArray) {
-        const bookingsCollectionRef = collection(firestore, 'bookingRequest');
-        const q = query(bookingsCollectionRef, where('bookingId', '==', booking.bookingId));
-        const bookings = await getDocs(q);
-        for (const d of bookings.docs) {
-          const bookingRef = doc(firestore, 'bookingRequest', d.data().bookingId);
-          await updateDoc(bookingRef, { paymentStatus: 'pending' });
-        }
-      }
-      return paymentObj;
-    } else {
-      toast.error('an error occurred. please try again');
-    }
-  } catch (error) {
-    console.error(error);
+  if (snapShot.exists()) {
+    throw new Error('Payment ID already exists. Please try again.');
   }
+  await setDoc(paymentRequestRef, {
+    ...paymentObj,
+    displayName: paymentObj.displayName || '',
+    productRequest: true,
+  });
+  for (const booking of paymentObj.productRequestArray) {
+    const q = query(collection(firestore, 'bookingRequest'), where('bookingId', '==', booking.bookingId));
+    const bookings = await getDocs(q);
+    for (const d of bookings.docs) {
+      await updateDoc(d.ref, { paymentStatus: 'pending' });
+    }
+  }
+  return paymentObj;
 };
 
 /* Writes the customer's refund application and flips the source record to
@@ -913,14 +914,14 @@ export const uploadShipmentPaymentRequest = async (paymentObj) => {
   delete paymentObj.file;
   const snapShot = await getDoc(paymentRequestRef);
   if (!snapShot.exists()) {
-    await setDoc(paymentRequestRef, { ...paymentObj });
+    /* Firestore rejects undefined — users without a name have no displayName */
+    await setDoc(paymentRequestRef, { ...paymentObj, displayName: paymentObj.displayName || '' });
     for (const booking of paymentObj.productRequestArray) {
       const bookingsCollectionRef = collection(firestore, 'shipForMe');
       const q = query(bookingsCollectionRef, where('bookingId', '==', booking.bookingId));
       const bookings = await getDocs(q);
       for (const d of bookings.docs) {
-        const bookingRef = doc(firestore, 'shipForMe', d.data().bookingId);
-        await updateDoc(bookingRef, { paymentRequested: true });
+        await updateDoc(d.ref, { paymentRequested: true });
       }
     }
     return paymentObj;
@@ -934,13 +935,16 @@ export const uploadOrderPaymentRequest = async (paymentObj) => {
   delete paymentObj.file;
   const snapShot = await getDoc(paymentRequestRef);
   if (!snapShot.exists()) {
-    await setDoc(paymentRequestRef, { ...paymentObj });
+    /* Firestore rejects undefined — users without a name have no displayName */
+    await setDoc(paymentRequestRef, { ...paymentObj, displayName: paymentObj.displayName || '' });
     for (const order of paymentObj.pendingOrders) {
       const ordersCollectionRef = collection(firestore, 'ordersApi');
       const q = query(ordersCollectionRef, where('orderId', '==', order.orderId));
       const orders = await getDocs(q);
       for (const d of orders.docs) {
-        const orderRef = doc(firestore, 'ordersApi', d.data().orderId);
+        /* d.ref, not doc(…, orderId): older orders store orderId as a number,
+           and doc() throws on non-string ids. */
+        const orderRef = d.ref;
         /* Carry the chosen "pay now %" tier onto the order itself. Stored as
            a number (20, never "20%") — the bill breakdowns in both the
            customer app and the admin panel read it that way, and without it
@@ -1121,100 +1125,41 @@ export const get1688Category = async (level, categoryId) => {
 };
 
 /* ── Dashboard counters ──
-   The overview only needs how many are in each bucket, never the documents
-   themselves. `getCountFromServer` aggregates on the server: one round trip
-   per bucket, billed at one read per 1000 documents counted, instead of
-   pulling every order and shipment down to the browser to call .length on
-   them. Buckets mirror the tab rules on the detail pages.
-
-   NOTE: the compound queries below need composite indexes (userId +
-   shipmentStatusScore, userId + paymentStatus, …). Firestore logs a
-   ready-made creation link the first time each one runs; a failure is caught
-   per bucket and reported as 0 rather than taking the whole dashboard down. */
-const countWhere = async (collectionName, constraints) => {
+   How many of a user's documents sit in each tab. Every order / ship-for-me
+   request carries a `bucket` field kept in sync by the Cloud Function in
+   paicart-nextjs15/functions/ (rules: lib/buckets.js), so each tab is one
+   server-side count — ~1 read per 1000 documents, however long the user's
+   history, and always equal to what the tab list shows. Two equality
+   filters, so Firestore serves it from the built-in single-field indexes.
+   A failed count reports 0 rather than taking the dashboard down. */
+const countBucket = async (collectionName, userId, bucket) => {
   try {
-    const snap = await getCountFromServer(
-      query(collection(firestore, collectionName), ...constraints)
-    );
+    const snap = await getCountFromServer(query(
+      collection(firestore, collectionName),
+      where('userId', '==', userId),
+      where('bucket', '==', bucket),
+    ));
     return snap.data().count || 0;
   } catch (error) {
-    console.error(`count(${collectionName})`, error);
+    console.error(`count(${collectionName}, ${bucket})`, error);
     return 0;
   }
 };
 
 export const getOrderStatCounts = async (userId) => {
   if (!userId) return { toPay: 0, toShip: 0, inShipment: 0, toReceive: 0, delivered: 0 };
-  const mine = where('userId', '==', userId);
-  /* Mirrors getOrderBucket() in lib/orderMath.js, expressed in the terms
-     Firestore can aggregate on. One difference is unavoidable: the tab rules
-     move an order to "In Shipment" the moment a tracking number exists, which
-     cannot be combined with the score range in a single count query, so the
-     counts use score ≥ 3 (arrived at the CN warehouse) as the boundary. An
-     order that has a tracking number but has not been marked received yet is
-     therefore counted under To Ship while the list shows it under In
-     Shipment. */
-  const [toPayRaw, toPayRejected, toShip, inShipment, toReceive, delivered] =
-    await Promise.all([
-      /* Not Paid and Pending Payment both belong in To Pay */
-      countWhere('ordersApi', [
-        mine,
-        where('paymentStatus', 'in', ['purchaseLater', 'pending']),
-      ]),
-      /* a payment timeout is unpaid by definition — it belongs under
-         Rejected, not still waiting for money in To Pay */
-      countWhere('ordersApi', [
-        mine,
-        where('paymentStatus', 'in', ['purchaseLater', 'pending']),
-        where('orderStatus', '==', 'reject'),
-      ]),
-      countWhere('ordersApi', [
-        mine,
-        where('paymentStatus', 'in', ['Paid', 'Partially Paid']),
-        where('shipmentStatusScore', '<', 3),
-      ]),
-      countWhere('ordersApi', [
-        mine,
-        where('shipmentStatusScore', '>=', 3),
-        where('shipmentStatusScore', '<', 6),
-      ]),
-      countWhere('ordersApi', [mine, where('shipmentStatusScore', '==', 6)]),
-      countWhere('ordersApi', [mine, where('shipmentStatusScore', '>=', 7)]),
-    ]);
-  return {
-    toPay: Math.max(0, toPayRaw - toPayRejected),
-    toShip,
-    inShipment,
-    toReceive,
-    delivered,
-  };
+  const [toPay, toShip, inShipment, toReceive, delivered] = await Promise.all(
+    ['To Pay', 'To Ship', 'In Shipment', 'To Receive', 'Delivered']
+      .map((b) => countBucket('ordersApi', userId, b)),
+  );
+  return { toPay, toShip, inShipment, toReceive, delivered };
 };
 
 export const getShipStatCounts = async (userId) => {
   if (!userId) return { pending: 0, approved: 0, inShipment: 0, toReceive: 0, delivered: 0 };
-  const mine = where('userId', '==', userId);
-  const [pending, pendingRejected, approved, inShipment, toReceive, delivered] =
-    await Promise.all([
-      countWhere('shipForMe', [mine, where('status', '==', 'Pending')]),
-      countWhere('shipForMe', [
-        mine,
-        where('status', '==', 'Pending'),
-        where('orderStatus', '==', 'Reject'),
-      ]),
-      countWhere('shipForMe', [mine, where('status', '==', 'Rates Provided')]),
-      countWhere('shipForMe', [
-        mine,
-        where('shipmentStatusScore', '>=', 3),
-        where('shipmentStatusScore', '<', 6),
-      ]),
-      countWhere('shipForMe', [mine, where('shipmentStatusScore', '==', 6)]),
-      countWhere('shipForMe', [mine, where('shipmentStatusScore', '>=', 7)]),
-    ]);
-  return {
-    pending: Math.max(0, pending - pendingRejected),
-    approved,
-    inShipment,
-    toReceive,
-    delivered,
-  };
+  const [pending, approved, inShipment, toReceive, delivered] = await Promise.all(
+    ['Pending', 'Approved', 'In Shipment', 'To Receive', 'Delivered']
+      .map((b) => countBucket('shipForMe', userId, b)),
+  );
+  return { pending, approved, inShipment, toReceive, delivered };
 };

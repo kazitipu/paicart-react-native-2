@@ -6,6 +6,7 @@ import CopyIdButton from '@/components/CopyIdButton';
 import Collapsible from '@/components/ui/Collapsible';
 import { StatusBadge, PaymentBadge } from '@/components/ui/StatusBadge';
 import { canApplyRefund, refundMode } from '@/lib/refund';
+import { isFullyRefunded } from '@/lib/buckets';
 import colors from '@/theme/colors';
 
 /* A "Buy For Me" product request. Unlike an order it is a single product with
@@ -17,7 +18,9 @@ export default function RequestCard({
   const total = parseInt(request.totalAmount ?? request.amount ?? 0, 10) || 0;
   const paid = (request.payments || []).reduce((a, p) => a + (parseInt(p.amount, 10) || 0), 0);
   const due = Math.max(0, total - paid);
-  const payable = due > 0 && request.paymentStatus !== 'pending';
+  /* Nothing is owed on a rejected or fully refunded (cancelled) request */
+  const payable = due > 0 && request.paymentStatus !== 'pending'
+    && request.status !== 'Reject' && !isFullyRefunded(request);
   const refundable = canApplyRefund(request);
 
   return (

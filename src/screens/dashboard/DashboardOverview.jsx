@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Pressable, ScrollView, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import {
   Package, Truck, User, ChevronRight, MessageSquareWarning, Award,
 } from 'lucide-react-native';
@@ -11,7 +11,6 @@ import ComplaintModal from '@/components/ComplaintModal';
 import EmptyState from '@/components/ui/EmptyState';
 import { DASHBOARD_NAV } from '@/data/dashboardNav';
 import { getOrderStatCounts, getShipStatCounts } from '@/lib/firebaseUtils';
-import { getAllOrdersApiRedux, getAllShipForMeOfSingleUserRedux } from '@/store/actions';
 import { computeBuyerLvl, getLevelMeta } from '@/lib/buyerLevel';
 import colors from '@/theme/colors';
 
@@ -57,7 +56,6 @@ function StatRow({ title, stats, values, onPress }) {
 
 export default function DashboardOverview() {
   const navigation = useNavigation();
-  const dispatch = useDispatch();
   const currentUser = useSelector((s) => s.user?.currentUser);
 
   const [orderStats, setOrderStats] = useState(null);
@@ -70,13 +68,12 @@ export default function DashboardOverview() {
 
   const load = useCallback(() => {
     if (!currentUser?.id) return;
-    /* Server-side aggregations via getCountFromServer — these need the
-       composite Firestore indexes listed in Phase 13. */
+    /* Server-side counts on each document's `bucket` field — a few reads
+       however many orders the user has. The list screens load their own
+       data, so nothing here downloads the full history. */
     getOrderStatCounts(currentUser.id).then(setOrderStats).catch(() => {});
     getShipStatCounts(currentUser.id).then(setShipStats).catch(() => {});
-    dispatch(getAllOrdersApiRedux(currentUser.id));
-    dispatch(getAllShipForMeOfSingleUserRedux(currentUser.id));
-  }, [currentUser?.id, dispatch]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     load();
