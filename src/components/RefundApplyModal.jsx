@@ -36,6 +36,15 @@ const QUICK_REASONS = [
 
 const PAYMENT_METHODS = ['Bkash', 'Bank'];
 
+/* After-sale claim types — they decide what the admin refunds: missing
+   pieces get the product price back (shipping was only charged on what
+   arrived); a wrong or damaged item gets product + its shipping. */
+const CLAIM_TYPES = [
+  { value: 'missing', label: 'Missing pieces' },
+  { value: 'wrong', label: 'Wrong item' },
+  { value: 'damaged', label: 'Damaged item' },
+];
+
 /* Flattens an order's items/skus into one claimable list. Product requests
    have no SKU array — a booking is a single product with a quantity — so the
    picker is simply not rendered for them. */
@@ -65,6 +74,10 @@ export default function RefundApplyModal({
   const isProductRequest = kind === 'productRequest';
 
   const [reason, setReason] = useState('');
+  const [claimType, setClaimType] = useState('');
+  /* Product requests have no SKU list — the customer says how many pieces */
+  const [claimQuantity, setClaimQuantity] = useState('');
+  const requestQty = parseInt(target?.productQuantity) || 0;
   const [paymentMethod, setPaymentMethod] = useState('Bkash');
   const [bankInfo, setBankInfo] = useState('');
   const [qty, setQty] = useState({});
@@ -106,6 +119,17 @@ export default function RefundApplyModal({
       toast.error('Please select a reason for the refund.');
       return;
     }
+    if (!isQuick && !claimType) {
+      toast.error('Please choose what happened — missing, wrong or damaged.');
+      return;
+    }
+    if (!isQuick && isProductRequest) {
+      const q = parseInt(claimQuantity) || 0;
+      if (q <= 0 || (requestQty && q > requestQty)) {
+        toast.error(`Enter how many pieces (1–${requestQty || 'the ordered quantity'}).`);
+        return;
+      }
+    }
     if (!isQuick && !reason.trim()) {
       toast.error('Please describe the problem.');
       return;
@@ -142,6 +166,8 @@ export default function RefundApplyModal({
           quickRefund: isQuick,
           ...(isProductRequest ? { productRequest: true } : {}),
           ...(claimedSkus.length > 0 ? { skus: claimedSkus } : {}),
+          ...(!isQuick ? { claimType } : {}),
+          ...(!isQuick && isProductRequest ? { claimQuantity: parseInt(claimQuantity, 10) } : {}),
         }),
       );
       toast.success('Refund request submitted. Our team will review it and get back to you.');
@@ -192,6 +218,31 @@ export default function RefundApplyModal({
           })}
         </View>
       ) : (
+        <>
+        <View className="flex-row gap-2 mb-2">
+          {CLAIM_TYPES.map((t) => {
+            const active = claimType === t.value;
+            return (
+              <Pressable
+                key={t.value}
+                onPress={() => setClaimType(t.value)}
+                className={`flex-1 items-center rounded-xl px-2 py-2 border ${active ? 'bg-brand border-brand' : 'bg-white border-gray-200'}`}
+              >
+                <Text className={`text-3xs font-semibold ${active ? 'text-white' : 'text-gray-600'}`}>{t.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        {isProductRequest && (
+          <TextInput
+            value={claimQuantity}
+            onChangeText={setClaimQuantity}
+            keyboardType="number-pad"
+            placeholder={`How many pieces?${requestQty ? ` (ordered ${requestQty})` : ''}`}
+            placeholderTextColor="#9ca3af"
+            className="border border-gray-300 rounded-xl px-3 py-2.5 text-smd text-foreground mb-2"
+          />
+        )}
         <TextInput
           value={reason}
           onChangeText={setReason}
@@ -201,6 +252,7 @@ export default function RefundApplyModal({
           placeholderTextColor="#9ca3af"
           className="border border-gray-300 rounded-xl px-3 py-2.5 text-smd text-foreground min-h-[90px] mb-4"
         />
+        </>
       )}
 
       {skuRows.length > 0 && (

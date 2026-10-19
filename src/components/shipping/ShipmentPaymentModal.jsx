@@ -17,7 +17,7 @@ export default function ShipmentPaymentModal({
   visible, bookings = [], currentUser, onClose, onSuccess,
 }) {
   const dispatch = useDispatch();
-  const [tab, setTab] = useState('direct');
+  const [tab, setTab] = useState('bkash');
   const [method, setMethod] = useState('City');
   const [imageUrl, setImageUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +76,7 @@ export default function ShipmentPaymentModal({
     if (totalDue <= 0) return;
     setSubmitting(true);
     try {
-      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), shipmentRequest: true });
+      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), payerPhone: currentUser?.mobileNo || '', shipmentRequest: true });
       onClose?.();
     } catch {
       toast.error('An error occurred! Please try again later.');
@@ -113,8 +113,8 @@ export default function ShipmentPaymentModal({
 
       <View className="flex-row gap-2 mb-4">
         {[
-          { key: 'direct', label: 'Direct Deposit' },
           { key: 'bkash', label: 'Mobile Banking' },
+          { key: 'direct', label: 'Direct Deposit' },
         ].map((t) => {
           const active = tab === t.key;
           return (

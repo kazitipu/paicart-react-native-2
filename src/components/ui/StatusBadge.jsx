@@ -11,6 +11,7 @@ export const STATUS_BADGE = {
   'Abroad Warehouse': { color: 'violet', label: 'Abroad Warehouse' },
   [READY_STATUS]: { color: 'sky', label: READY_STATUS },
   'Bangladesh customs': { color: 'amber', label: '🇧🇩 BD Customs' },
+  'Bangladesh warehouse': { color: 'teal', label: 'Custom Released' },
   'Paicart warehouse': { color: 'teal', label: 'Paicart WH' },
   Delivered: { color: 'emerald', label: 'Delivered' },
   Reject: { color: 'red', label: 'Rejected' },

@@ -8,6 +8,7 @@ import { getSingleOrderApi, getSingleProductRequest } from '@/lib/firebaseUtils'
 import {
   getGoodsTotal, getTotalPaid, getTotalDue, getOfferDiscount,
 } from '@/lib/orderMath';
+import { statusDisplay } from '@/lib/shipment';
 
 const money = (n) => `৳${Math.round(n).toLocaleString()}`;
 
@@ -148,7 +149,7 @@ export default function OrderInvoice() {
             <InvoiceBadge
               color={(record.orderStatus || record.status) === 'reject' ? 'red' : 'gray'}
             >
-              {record.orderStatus || record.status || 'Pending'}
+              {statusDisplay(record.orderStatus || record.status) || 'Pending'}
             </InvoiceBadge>
           </View>
 

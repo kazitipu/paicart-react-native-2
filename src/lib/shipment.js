@@ -27,3 +27,10 @@ export const READY_SEA_LABEL = 'Ready for vessel';
 
 export const readyStepLabel = (record, airLabel = READY_STATUS) =>
   isSeaShipment(record) ? READY_SEA_LABEL : airLabel;
+
+/* What a stored status reads as — mirrors the web's src/lib/shipment.js.
+ * "Bangladesh warehouse" is the stage after BD customs and is shown as
+ * "Custom Released"; the stored value is written by the admin panel and must
+ * not change — only the wording does. */
+export const STATUS_DISPLAY = { 'Bangladesh warehouse': 'Custom Released' };
+export const statusDisplay = (status) => STATUS_DISPLAY[status] || status;

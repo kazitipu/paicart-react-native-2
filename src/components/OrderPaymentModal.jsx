@@ -52,7 +52,7 @@ export default function OrderPaymentModal({
   const [selectedTier, setSelectedTier] = useState(null);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('City');
-  const [tab, setTab] = useState('direct');
+  const [tab, setTab] = useState('bkash');
   const [imageUrl, setImageUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -149,7 +149,7 @@ export default function OrderPaymentModal({
     if (!validate()) return;
     setSubmitting(true);
     try {
-      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), orderRequest: true });
+      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), payerPhone: currentUser?.mobileNo || '', orderRequest: true });
       /* The gateway confirms server-side and the app is returned to via the
          paicart:// deep link, so nothing is written here. */
       onClose?.();
@@ -232,8 +232,8 @@ export default function OrderPaymentModal({
       {/* Method tabs */}
       <View className="flex-row gap-2 mt-3 mb-4">
         {[
-          { key: 'direct', label: 'Direct Deposit' },
           { key: 'bkash', label: 'Mobile Banking' },
+          { key: 'direct', label: 'Direct Deposit' },
         ].map((t) => {
           const active = tab === t.key;
           return (

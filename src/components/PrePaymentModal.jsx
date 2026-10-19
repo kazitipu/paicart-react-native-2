@@ -42,7 +42,7 @@ export default function PrePaymentModal({
   const [step, setStep] = useState('payment');
   const [selectedTier, setSelectedTier] = useState(null);
   const [method, setMethod] = useState('City');
-  const [tab, setTab] = useState('direct');
+  const [tab, setTab] = useState('bkash');
   const [imageUrl, setImageUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -108,7 +108,7 @@ export default function PrePaymentModal({
     }
     setSubmitting(true);
     try {
-      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), orderRequest: true });
+      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), payerPhone: currentUser?.mobileNo || '', orderRequest: true });
       onClose?.();
     } catch {
       toast.error('An error occurred! Please try again later.');
@@ -184,8 +184,8 @@ export default function PrePaymentModal({
 
       <View className="flex-row gap-2 mb-4">
         {[
-          { key: 'direct', label: 'Direct Deposit' },
           { key: 'bkash', label: 'Mobile Banking' },
+          { key: 'direct', label: 'Direct Deposit' },
         ].map((t) => {
           const active = tab === t.key;
           return (
