@@ -11,18 +11,17 @@ import Tabs from '@/components/ui/Tabs';
 import EmptyState from '@/components/ui/EmptyState';
 import { getAllBookingsOfSingleUserRedux } from '@/store/actions';
 import { refundMode } from '@/lib/refund';
-import { isFullyRefunded } from '@/lib/buckets';
+import { getRequestBucket } from '@/lib/buckets';
 import colors from '@/theme/colors';
 
-const TABS = ['All', 'Pending', 'Approved', 'In Shipment', 'Delivered', 'Rejected'];
-
+/* Same pipeline as My Orders (1688), with Pending → Approved in front while
+   the price is agreed. Rules: lib/buckets.js getRequestBucket. */
+const TABS = ['All', 'Pending', 'Approved', 'To Ship', 'In Shipment', 'To Receive', 'Delivered', 'Refunds', 'Rejected'];
 const matches = (r, tab) => {
   if (tab === 'All') return true;
-  const s = String(r.status || 'Pending');
-  /* Rejected or fully refunded requests have nothing left in transit */
-  if (tab === 'In Shipment')
-    return !!r.trackingNo && s !== 'Delivered' && s !== 'Reject' && !isFullyRefunded(r);
-  return s === tab;
+  /* Cross-cutting flag, not a stage — same as the My Orders Refunds tab */
+  if (tab === 'Refunds') return !!r.refundStatus;
+  return getRequestBucket(r) === tab;
 };
 
 export default function BuyShipMyRequests() {

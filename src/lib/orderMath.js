@@ -57,9 +57,9 @@ export const getGoodsTotal = (order) =>
 
 export const canPayOrder = (order) => {
   const isRejected = (order.orderStatus || '').toLowerCase() === 'reject';
-  /* A fully refunded order is cancelled — its leftover "due" is not owed */
+  /* Once a refund is given the order is finished — nothing more is owed */
   return !isRejected
-    && !isFullyRefunded(order)
+    && !isRefundGiven(order)
     && order.paymentStatus !== 'Paid'
     && order.paymentStatus !== 'pending'
     && getTotalDue(order) > 0;
@@ -67,6 +67,6 @@ export const canPayOrder = (order) => {
 
 /* Tab rules live in buckets.js (a copy of the web repo's, shared with the
    Cloud Function that stores each order's `bucket` for the dashboard). */
-import { isFullyRefunded } from './buckets';
+import { isRefundGiven } from './buckets';
 
-export { getOrderBucket, isFullyRefunded } from './buckets';
+export { getOrderBucket, isRefundGiven } from './buckets';

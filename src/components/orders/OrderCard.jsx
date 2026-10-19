@@ -7,7 +7,10 @@ import Collapsible from '@/components/ui/Collapsible';
 import { StatusBadge, PaymentBadge } from '@/components/ui/StatusBadge';
 import { getGoodsTotal, getTotalPaid, getTotalDue, getOfferDiscount, canPayOrder } from '@/lib/orderMath';
 import { isFullyUnpaid, isCancelled, remainingMs, formatCountdown } from '@/lib/orderTabs';
-import { canApplyRefund, refundMode } from '@/lib/refund';
+import { useNavigation } from '@react-navigation/native';
+import { canApplyRefund, refundMode, buyAgainProductId } from '@/lib/refund';
+import { isRefundGiven } from '@/lib/buckets';
+import { ROUTES } from '@/navigation/routes';
 import colors from '@/theme/colors';
 
 /* Live countdown on an order still inside its 72-hour unpaid window. */
@@ -51,8 +54,15 @@ export default function OrderCard({
   const paid = getTotalPaid(order);
   const due = Math.max(0, getTotalDue(order));
   const offer = getOfferDiscount(order);
+  const navigation = useNavigation();
   const payable = canPayOrder(order);
   const refundable = canApplyRefund(order);
+  /* Once a refund is given Pay disappears and Buy Again takes its place:
+     the product page, at today's price */
+  const buyAgainId = isRefundGiven(order) ? buyAgainProductId(order) : null;
+  const buyAgain = onBuyAgain || (buyAgainId
+    ? () => navigation.navigate(ROUTES.Product.tab, { screen: 'Product', params: { id: buyAgainId } })
+    : null);
 
   return (
     <View className="bg-white rounded-xl border border-gray-100 mb-2.5 overflow-hidden">
@@ -203,12 +213,9 @@ export default function OrderCard({
             <Text className="text-2xs font-semibold text-gray-600">Invoice</Text>
           </Pressable>
         )}
-        {onBuyAgain && (
-          <Pressable
-            onPress={onBuyAgain}
-            className="border border-gray-200 rounded-lg px-3 py-2"
-          >
-            <Text className="text-2xs font-semibold text-gray-600">Buy again</Text>
+        {buyAgain && (
+          <Pressable onPress={buyAgain} className="bg-primary rounded-lg px-3.5 py-2 active:opacity-80">
+            <Text className="text-white text-2xs font-bold">Buy Again</Text>
           </Pressable>
         )}
       </View>

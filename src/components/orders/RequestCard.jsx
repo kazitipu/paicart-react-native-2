@@ -5,8 +5,10 @@ import ProductImage from '@/components/ui/ProductImage';
 import CopyIdButton from '@/components/CopyIdButton';
 import Collapsible from '@/components/ui/Collapsible';
 import { StatusBadge, PaymentBadge } from '@/components/ui/StatusBadge';
+import { useNavigation } from '@react-navigation/native';
 import { canApplyRefund, refundMode } from '@/lib/refund';
-import { isFullyRefunded } from '@/lib/buckets';
+import { isRefundGiven } from '@/lib/buckets';
+import { ROUTES } from '@/navigation/routes';
 import colors from '@/theme/colors';
 
 /* A "Buy For Me" product request. Unlike an order it is a single product with
@@ -18,9 +20,11 @@ export default function RequestCard({
   const total = parseInt(request.totalAmount ?? request.amount ?? 0, 10) || 0;
   const paid = (request.payments || []).reduce((a, p) => a + (parseInt(p.amount, 10) || 0), 0);
   const due = Math.max(0, total - paid);
-  /* Nothing is owed on a rejected or fully refunded (cancelled) request */
+  const navigation = useNavigation();
+  /* Nothing is owed on a rejected request, or once a refund is given */
+  const refundGiven = isRefundGiven(request);
   const payable = due > 0 && request.paymentStatus !== 'pending'
-    && request.status !== 'Reject' && !isFullyRefunded(request);
+    && request.status !== 'Reject' && !refundGiven;
   const refundable = canApplyRefund(request);
 
   return (
@@ -108,6 +112,18 @@ export default function RequestCard({
         {payable && onPay && (
           <Pressable onPress={onPay} className="bg-primary rounded-lg px-3.5 py-2 active:opacity-80">
             <Text className="text-white text-2xs font-bold">Pay ৳{due.toLocaleString()}</Text>
+          </Pressable>
+        )}
+        {/* Book Again replaces Pay once the refund is given: Buy For Me,
+            pre-filled from this request */}
+        {refundGiven && (
+          <Pressable
+            onPress={() =>
+              navigation.navigate(ROUTES.BuyForMe.tab, { screen: 'BuyForMe', params: { rebook: request } })
+            }
+            className="bg-primary rounded-lg px-3.5 py-2 active:opacity-80"
+          >
+            <Text className="text-white text-2xs font-bold">Book Again</Text>
           </Pressable>
         )}
         {refundable && onRefund && (

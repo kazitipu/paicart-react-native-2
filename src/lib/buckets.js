@@ -9,19 +9,12 @@
 
 /* Refunds are written by the admin panel onto the record itself:
    `refundStatus` 'requested' → 'given' | 'rejected', with the amount in
-   `refund`. A refund is FULL when it gives back (nearly) everything paid —
-   the 3% slack covers the 2.5% cancellation fee the policy deducts. */
-const FULL_REFUND_SHARE = 0.97;
-
-/* Same sum as orderMath.getTotalPaid */
-const totalPaid = (r) =>
-  (r?.payments || []).reduce((a, p) => a + (parseInt(p.amount) || 0), 0);
-
-export const isFullyRefunded = (r) => {
-  if (r?.refundStatus !== 'given') return false;
-  const refunded = parseFloat(r.refund) || 0;
-  return refunded > 0 && refunded >= totalPaid(r) * FULL_REFUND_SHARE;
-};
+   `refund`. Once a refund has been GIVEN the order is finished, whatever the
+   amount: before delivery (Quick Refund) it leaves the pipeline for the
+   Refunds tab; after delivery (After Sales) it stays Delivered. Either way
+   nothing more is owed — the customer is offered Buy / Book Again instead
+   of Pay Now. */
+export const isRefundGiven = (r) => r?.refundStatus === 'given';
 
 /* ── Which tab an order belongs in ──
    One bucket per order, evaluated in priority order, so tabs can never
@@ -35,25 +28,25 @@ export const isFullyRefunded = (r) => {
                  (score 3–5 counts even if no tracking number was entered)
      To Receive  weight updated / invoice generated / payment due / received
      Delivered   delivered
-     Refunded    fully refunded before delivery — nothing left to ship
+     Refunded    a Quick Refund was given (before delivery) — finished
      Rejected    payment timeout, or cancelled by user or admin
 
    The Refunds tab is deliberately not a bucket: it is a cross-cutting flag
    (`refundStatus`) an order carries while sitting in any bucket above. A
-   pending request or a PARTIAL refund leaves the order in its stage (the
-   remaining items still ship); only a full refund takes it out of the
-   pipeline. Refunded orders show under All and Refunds only. */
+   pending or rejected request leaves the order in its stage; a given refund
+   takes it out of the pipeline (Refunded, shown under All and Refunds), or
+   leaves it in Delivered when the goods were already received. */
 export const getOrderBucket = (order) => {
   const pay = (order?.paymentStatus || '').toLowerCase();
   const st = (order?.orderStatus || '').toLowerCase();
   const score = parseInt(order?.shipmentStatusScore) || 1;
+  const delivered = score >= 7 || st === 'delivered';
 
+  /* A Quick Refund moves the order straight to Refunds — even one the admin
+     also rejected. Goods already received stay Delivered (After Sales). */
+  if (isRefundGiven(order) && !delivered) return 'Refunded';
   if (st === 'reject') return 'Rejected';
-  if (score >= 7 || st === 'delivered') return 'Delivered';
-
-  /* Delivered wins above: goods the customer already has stay Delivered even
-     if an after-sale refund later covers them in full. */
-  if (isFullyRefunded(order)) return 'Refunded';
+  if (delivered) return 'Delivered';
 
   /* The parcel is in Bangladesh and the final bill is being settled — weight
      taken, invoice raised, payment due or received against it. */
@@ -70,6 +63,36 @@ export const getOrderBucket = (order) => {
   /* Not Paid and Pending Payment both sit here — a payment awaiting review is
      still money the customer has committed but the order has not banked. */
   return 'To Pay';
+};
+
+/* Product requests ("Buy & Ship For Me" — bookingRequest) follow the 1688
+   order pipeline, with two steps in front of it while the price is agreed:
+
+     Pending     booked, waiting for the admin to quote
+     Approved    admin quoted ("Rates Provided"), not paid yet — a payment
+                 still awaiting admin approval stays here
+     To Ship     payment approved (Paid / Partially Paid) — Quick Refund here
+     In Shipment / To Receive / Delivered / Refunded / Rejected — exactly as
+                 getOrderBucket
+
+   Rates Provided and Purchased are both score 2, so the early steps key off
+   the status and payment, not the score. */
+export const getRequestBucket = (req) => {
+  const pay = (req?.paymentStatus || '').toLowerCase();
+  const st = (req?.orderStatus || req?.status || '').toLowerCase();
+  const score = parseInt(req?.shipmentStatusScore) || 1;
+
+  const delivered = score >= 7 || st === 'delivered';
+
+  if (isRefundGiven(req) && !delivered) return 'Refunded';
+  if (st === 'reject') return 'Rejected';
+  if (delivered) return 'Delivered';
+  if (score >= 6 || !!req?.receivedWeight || parseInt(req?.shippingChargeCustomer) > 0)
+    return 'To Receive';
+  if (req?.trackingNo || score >= 3) return 'In Shipment';
+  if (pay === 'paid' || pay === 'partially paid' || st === 'purchased') return 'To Ship';
+  if (st === 'rates provided') return 'Approved';
+  return 'Pending';
 };
 
 /* Ship-for-me requests, with the same one-bucket-per-document rule. Checked

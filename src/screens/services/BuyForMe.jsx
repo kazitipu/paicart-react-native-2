@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { ArrowLeft, Plane, Ship, Package } from 'lucide-react-native';
 import Field from '@/components/ui/Field';
@@ -27,16 +27,23 @@ export default function BuyForMe() {
   const currentUser = useSelector((s) => s.user?.currentUser);
   const d2dRates = useSelector((s) => s.bookingRequests?.d2dRates || []);
 
-  const [store, setStore] = useState('1688');
-  const [country, setCountry] = useState('China');
-  const [method, setMethod] = useState('air');
-  const [productType, setProductType] = useState('');
-  const [productUrl, setProductUrl] = useState('');
-  const [productName, setProductName] = useState('');
-  const [quantity, setQuantity] = useState('');
-  const [variant, setVariant] = useState('');
+  /* "Book Again" (offered once a request's refund is given) passes the old
+     request as `rebook`; the form starts pre-filled from it. Requests made on
+     the web use productQuantity/productVariant, ones made here quantity/variant. */
+  const rebook = useRoute().params?.rebook || null;
+  const rebookType = rebook?.productType;
+  const [store, setStore] = useState(rebook?.store || '1688');
+  const [country, setCountry] = useState(rebook?.country || 'China');
+  const [method, setMethod] = useState(
+    String(rebook?.shipmentMethod || rebook?.method || '').toLowerCase() === 'sea' ? 'sea' : 'air',
+  );
+  const [productType, setProductType] = useState(rebook?.productType || '');
+  const [productUrl, setProductUrl] = useState(rebook?.productUrl || '');
+  const [productName, setProductName] = useState(rebook?.productName || '');
+  const [quantity, setQuantity] = useState(String(rebook?.productQuantity || rebook?.quantity || ''));
+  const [variant, setVariant] = useState(rebook?.productVariant || rebook?.variant || '');
   const [note, setNote] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState(rebook?.imageUrl || '');
   const [submitting, setSubmitting] = useState(false);
 
   const isLoggedIn =
@@ -55,9 +62,11 @@ export default function BuyForMe() {
 
   useEffect(() => {
     if (typeOptions.length && !typeOptions.some((t) => t.value === productType)) {
-      setProductType(typeOptions[0].value);
+      /* Prefer the rebooked request's type once its rate table has loaded */
+      const again = typeOptions.find((t) => t.value === rebookType);
+      setProductType((again || typeOptions[0]).value);
     }
-  }, [typeOptions, productType]);
+  }, [typeOptions, productType, rebookType]);
 
   const submit = async () => {
     if (!productUrl.trim() && !productName.trim()) {

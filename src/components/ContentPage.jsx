@@ -5,6 +5,27 @@ import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft } from 'lucide-react-native';
 import colors from '@/theme/colors';
 
+/* An optional bold "Label: " lead-in, as the web pages draw it */
+function LabelledText({ label, text }) {
+  return (
+    <Text className="text-smd text-gray-600 leading-relaxed">
+      {!!label && <Text className="font-bold text-foreground">{label}: </Text>}
+      {text}
+    </Text>
+  );
+}
+
+function Bullet({ color, label, text }) {
+  return (
+    <View className="flex-row gap-2.5 py-1">
+      <View className="w-1.5 h-1.5 rounded-full mt-2" style={{ backgroundColor: color }} />
+      <View className="flex-1">
+        <LabelledText label={label} text={text} />
+      </View>
+    </View>
+  );
+}
+
 /* Renders one of the extracted legal documents. The web drew each of these as
    a bespoke page; they only ever differed in their content, so there is one
    renderer and the copy lives in data/legalContent.js. */
@@ -27,6 +48,12 @@ export default function ContentPage({ doc, children }) {
 
       <ScrollView contentContainerClassName="p-3 pb-10">
         {children}
+
+        {!!doc?.intro && (
+          <View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-3">
+            <Text className="text-smd text-amber-800 leading-relaxed">{doc.intro}</Text>
+          </View>
+        )}
 
         {(doc?.sections || []).map((section, i) => (
           <View
@@ -51,8 +78,15 @@ export default function ContentPage({ doc, children }) {
                         </Text>
                       </View>
                     )}
-                    <Text className="flex-1 text-smd text-gray-600 leading-relaxed">{b.text}</Text>
+                    <View className="flex-1">
+                      <LabelledText label={b.label} text={b.text} />
+                      {(b.sub || []).map((s, k) => (
+                        <Bullet key={k} color={section.color} label={s.label} text={s.text} />
+                      ))}
+                    </View>
                   </View>
+                ) : b.type === 'bullet' ? (
+                  <Bullet key={n} color={section.color} label={b.label} text={b.text} />
                 ) : (
                   <Text key={n} className="text-smd text-gray-600 leading-relaxed py-1">
                     {b.text}
