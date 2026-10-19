@@ -78,3 +78,10 @@ export const showRefundBlock = (r) => {
  * request. null when there is nothing to reorder from. */
 export const buyAgainProductId = (order) => order?.items?.[0]?.id ?? null;
 export const bookAgainId = (request) => request?.bookingId ?? null;
+
+/* What was actually refunded, as entered by the admin on approval (`refund`
+ * on the record). 0 when nothing has been recorded. */
+export const refundedAmount = (r) => {
+  const n = parseFloat(r?.refund);
+  return n > 0 ? Math.round(n) : 0;
+};

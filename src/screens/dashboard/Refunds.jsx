@@ -12,6 +12,7 @@ import {
   getAllOrdersApiRedux, getAllBookingsOfSingleUserRedux, getAllShipForMeOfSingleUserRedux,
 } from '@/store/actions';
 import colors from '@/theme/colors';
+import { refundedAmount } from '@/lib/refund';
 
 const TABS = [
   { key: 'order', label: 'Orders' },
@@ -115,9 +116,11 @@ export default function Refunds() {
                   {item.refundStatus}
                 </SoftPill>
               </View>
-              {!!item.refundAmount && (
+              {/* The amount lives in `refund` on the record (set when the admin
+                  approves) — `refundAmount` only exists on refund requests */}
+              {refundedAmount(item) > 0 && (
                 <Text className="text-2xs text-gray-500 mt-1.5">
-                  Claimed ৳{Math.round(item.refundAmount).toLocaleString()}
+                  Refunded ৳{refundedAmount(item).toLocaleString()}
                 </Text>
               )}
               {!!(item.orderedDate || item.date) && (

@@ -8,7 +8,7 @@ import { StatusBadge, PaymentBadge } from '@/components/ui/StatusBadge';
 import { getGoodsTotal, getTotalPaid, getTotalDue, getOfferDiscount, canPayOrder } from '@/lib/orderMath';
 import { isFullyUnpaid, isCancelled, remainingMs, formatCountdown } from '@/lib/orderTabs';
 import { useNavigation } from '@react-navigation/native';
-import { canApplyRefund, refundMode, buyAgainProductId } from '@/lib/refund';
+import { canApplyRefund, refundMode, buyAgainProductId, refundedAmount } from '@/lib/refund';
 import { isRefundGiven } from '@/lib/buckets';
 import { ROUTES } from '@/navigation/routes';
 import colors from '@/theme/colors';
@@ -94,7 +94,10 @@ export default function OrderCard({
           )}
           {!!order.refundStatus && (
             <View className="rounded-full bg-red-50 px-2 py-0.5">
-              <Text className="text-2xs font-bold text-brand">Refund {order.refundStatus}</Text>
+              <Text className="text-2xs font-bold text-brand">
+                Refund {order.refundStatus}
+                {refundedAmount(order) > 0 ? ` · ৳${refundedAmount(order).toLocaleString()}` : ''}
+              </Text>
             </View>
           )}
         </View>

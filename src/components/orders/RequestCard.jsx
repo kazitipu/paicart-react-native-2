@@ -6,7 +6,7 @@ import CopyIdButton from '@/components/CopyIdButton';
 import Collapsible from '@/components/ui/Collapsible';
 import { StatusBadge, PaymentBadge } from '@/components/ui/StatusBadge';
 import { useNavigation } from '@react-navigation/native';
-import { canApplyRefund, refundMode } from '@/lib/refund';
+import { canApplyRefund, refundMode, refundedAmount } from '@/lib/refund';
 import { isRefundGiven } from '@/lib/buckets';
 import { ROUTES } from '@/navigation/routes';
 import colors from '@/theme/colors';
@@ -53,6 +53,14 @@ export default function RequestCard({
         <View className="flex-row items-center gap-2 mt-1.5">
           <StatusBadge status={request.status} req={request} />
           {!!request.date && <Text className="text-2xs text-gray-400">{request.date}</Text>}
+          {!!request.refundStatus && (
+            <View className="rounded-full bg-red-50 px-2 py-0.5">
+              <Text className="text-2xs font-bold text-brand">
+                Refund {request.refundStatus}
+                {refundedAmount(request) > 0 ? ` · ৳${refundedAmount(request).toLocaleString()}` : ''}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View className="flex-row gap-2.5 mt-3">
