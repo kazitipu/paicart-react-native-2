@@ -12,16 +12,13 @@ import { canApplyRefund, refundMode, buyAgainProductId, refundedAmount } from '@
 import { isRefundGiven } from '@/lib/buckets';
 import { ROUTES } from '@/navigation/routes';
 import colors from '@/theme/colors';
+import useNow from '@/lib/useNow';
 
 /* Live countdown on an order still inside its 72-hour unpaid window. */
 function UnpaidCountdown({ order }) {
-  const [ms, setMs] = useState(() => remainingMs(order));
-
-  useEffect(() => {
-    if (!isFullyUnpaid(order) || isCancelled(order)) return undefined;
-    const t = setInterval(() => setMs(remainingMs(order)), 1000);
-    return () => clearInterval(t);
-  }, [order]);
+  /* Re-renders each second (only while this screen is focused). */
+  const now = useNow(1000, isFullyUnpaid(order) && !isCancelled(order));
+  const ms = remainingMs(order, now);
 
   if (!isFullyUnpaid(order) || isCancelled(order) || ms <= 0) return null;
 

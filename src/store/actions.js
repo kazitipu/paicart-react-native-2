@@ -10,6 +10,7 @@ import {
   uploadRefundApply,
   getCurrency,
   addCartItemTofirestore,
+  saveWishlistToFirestore,
   removeItemFromCart,
   addToOrdersApi,
   getAllOrdersApi,
@@ -30,7 +31,6 @@ import {
   deleteShipForMeList,
   getSingleShipForMe,
   getAllHomeCategory,
-  sendOtp,
   verifyOtp,
   getSingleOrderApi,
   getAllNotices,
@@ -138,12 +138,25 @@ export const decrementQty = (product) => (dispatch) => {
   dispatch({ type: 'DECREMENT_QTY', product });
 };
 
-export const addToWishlist = (product) => (dispatch) => {
-  dispatch({ type: 'ADD_TO_WISHLIST', product });
+/* Persist after the reducer has applied the change, so Firestore always
+   holds exactly what is on screen. Failures keep the local change and warn. */
+const persistWishlist = (getState) => {
+  const state = getState();
+  const id = state.user?.currentUser?.id;
+  if (!id) return;
+  saveWishlistToFirestore(id, state.wishlist?.wishlist || []).catch(() =>
+    toast.error('Could not sync your wishlist'),
+  );
 };
 
-export const removeFromWishlist = (product_id) => (dispatch) => {
+export const addToWishlist = (product) => (dispatch, getState) => {
+  dispatch({ type: 'ADD_TO_WISHLIST', product });
+  persistWishlist(getState);
+};
+
+export const removeFromWishlist = (product_id) => (dispatch, getState) => {
   dispatch({ type: 'REMOVE_FROM_WISHLIST', product_id });
+  persistWishlist(getState);
 };
 
 export const setOrderObj = (orderObj) => ({ type: 'SET_ORDER_OBJECT', payload: orderObj });
@@ -163,7 +176,9 @@ export const getOrderTrackingResultRedux = (trackingNo) => async (dispatch) => {
 
 export const getAllD2DRatesRedux = (freightType, country) => async (dispatch) => {
   const allD2DRatesArray = await getAllD2DRates(freightType, country);
-  dispatch({ type: 'GET_ALL_D2D_RATES', payload: allD2DRatesArray });
+  /* The fetch returns undefined on failure, and the reducer spreads the
+     payload — an empty list keeps the screen alive instead of crashing. */
+  dispatch({ type: 'GET_ALL_D2D_RATES', payload: allD2DRatesArray || [] });
 };
 
 export const getAllNoticesRedux = () => async (dispatch) => {
@@ -304,6 +319,8 @@ export const uploadRefundApplyRedux = (refundObject) => async (dispatch) => {
   /* Both reducers index into the payload, so a missing record would throw
      inside the store rather than at the call site. */
   if (!refund) return;
+  /* No reducer holds Ship For Me records by id here — the page refetches */
+  if (refundObject.shipmentRequest) return;
   dispatch({
     type: refundObject.productRequest ? 'UPLOAD_REFUND_APPLY_PRODUCT_REQUEST' : 'UPLOAD_REFUND_APPLY',
     payload: refund,
@@ -327,12 +344,10 @@ export const sendOtpRedux = (number) => async (dispatch) => {
   dispatch({ type: 'SET_NUMBER', payload: number });
 };
 
-/* Resolves true only when the code was right. verifyOtp now returns null on
-   both failure paths (expired / wrong), so a bad code no longer overwrites the
-   current user and the caller can branch on the result. */
+/* verifyOtp throws on a wrong or expired code (same as the web), so a failed
+   attempt never reaches SET_CURRENT_USER and the caller toasts err.message. */
 export const verifyOtpRedux = (number, otp) => async (dispatch) => {
   const userObj = await verifyOtp(number, otp);
-  if (!userObj) return false;
   dispatch({ type: 'SET_CURRENT_USER', payload: userObj });
-  return true;
+  return userObj;
 };

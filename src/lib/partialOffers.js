@@ -69,3 +69,11 @@ export const offerFieldsFor = (tier) =>
         offerDiscountAmount: tier.discountAmount,
       }
     : {};
+
+/* The web pages that open a payment modal keep only offers that have not
+   expired and take the first: `partials.filter(p => !p.expirationDate ||
+   new Date(p.expirationDate).getTime() > Date.now())[0]`. */
+export const activePartialFrom = (list) =>
+  (list || []).filter(
+    (p) => !p.expirationDate || new Date(p.expirationDate).getTime() > Date.now(),
+  )[0] || null;

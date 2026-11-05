@@ -1,43 +1,62 @@
 import React from 'react';
 import { View, Text } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { C } from '@/components/product/ui';
+import { TS, tpx } from '@/components/cart/CartBits';
 import { MANUAL_BKASH_FEE_PCT, manualBkashFee } from '@/lib/payments';
+import { PAY } from './PaymentSheet';
 
-/* Shown only for the manual bKash route, where the customer sends the money
-   themselves and therefore covers bKash's send-money charge on top. The hosted
-   gateway uses a different rate — see lib/payments.js. */
-export default function ManualBkashTotal({ method, amount, label = 'Send to bKash' }) {
+/* Port of the web's ManualBkashTotal (ship-for-me/my-request/_shared.jsx).
+ *
+ * bKash charges the sender a cash-out fee on a personal-account transfer, so
+ * the amount the customer actually has to send is higher than the amount
+ * credited to the order. Shown wherever a manual bKash transfer is selected —
+ * the gateway flow carries its own (different, 1.5%) fee.
+ *
+ * mt-2 rounded-xl border px-3 py-2 space-y-1, #fdf2f8 / #fbcfe8. The web's
+ * mt-2 collapses into the surrounding space-y-2 inside the bank list, so the
+ * list passes `style={{ marginTop: 0 }}` and its gap does the spacing. */
+export default function ManualBkashTotal({ method, amount, label = 'Send to bKash', style }) {
   const payable = parseFloat(amount) || 0;
   if (method !== 'Bkash' || payable <= 0) return null;
   const fee = manualBkashFee(payable);
-
   return (
-    <View
-      className="mt-2 rounded-xl border px-3 py-2"
-      style={{ backgroundColor: '#fdf2f8', borderColor: '#fbcfe8' }}
+    <Animated.View
+      entering={FadeIn.duration(180)}
+      style={[
+        {
+          marginTop: 8,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: PAY.PINK200,
+          backgroundColor: PAY.PINK50,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          gap: 4,
+        },
+        style,
+      ]}
     >
-      <View className="flex-row items-center justify-between py-0.5">
-        <Text className="text-3xs text-gray-600">Order amount</Text>
-        <Text className="text-3xs font-semibold text-gray-600">
-          {payable.toLocaleString()} Tk
-        </Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={[tpx(11), { color: C.gray600 }]}>Order amount</Text>
+        <Text style={[tpx(11), { color: C.gray600, fontWeight: '600' }]}>{payable.toLocaleString()} Tk</Text>
       </View>
-      <View className="flex-row items-center justify-between py-0.5">
-        <Text className="text-3xs text-gray-600">bKash charge ({MANUAL_BKASH_FEE_PCT}%)</Text>
-        <Text className="text-3xs font-semibold text-gray-600">
-          +{fee.toLocaleString()} Tk
-        </Text>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={[tpx(11), { color: C.gray600 }]}>bKash charge ({MANUAL_BKASH_FEE_PCT}%)</Text>
+        <Text style={[tpx(11), { color: C.gray600, fontWeight: '600' }]}>+{fee.toLocaleString()} Tk</Text>
       </View>
       <View
-        className="flex-row items-center justify-between pt-1 mt-1 border-t"
-        style={{ borderColor: '#fbcfe8' }}
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          paddingTop: 4,
+          borderTopWidth: 1,
+          borderTopColor: PAY.PINK200,
+        }}
       >
-        <Text className="text-tiny font-extrabold" style={{ color: '#e2136e' }}>
-          {label}
-        </Text>
-        <Text className="text-tiny font-extrabold" style={{ color: '#e2136e' }}>
-          {(payable + fee).toLocaleString()} Tk
-        </Text>
+        <Text style={[TS.xs, { fontWeight: '800', color: PAY.BKASH_TEXT }]}>{label}</Text>
+        <Text style={[TS.xs, { fontWeight: '800', color: PAY.BKASH_TEXT }]}>{(payable + fee).toLocaleString()} Tk</Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }

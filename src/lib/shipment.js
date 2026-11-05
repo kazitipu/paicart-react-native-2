@@ -1,3 +1,5 @@
+import { getShipBucket } from './buckets';
+
 /* Freight-mode helpers.
  *
  * The mode is stored under two different shapes depending on which flow
@@ -27,6 +29,10 @@ export const READY_SEA_LABEL = 'Ready for vessel';
 
 export const readyStepLabel = (record, airLabel = READY_STATUS) =>
   isSeaShipment(record) ? READY_SEA_LABEL : airLabel;
+
+/* Which ship-for-me tab a request belongs to. The rule itself lives in
+ * buckets.js, shared with the Cloud Function behind the dashboard counts. */
+export const matchShipTab = (req, tab) => tab === 'All' || getShipBucket(req) === tab;
 
 /* What a stored status reads as — mirrors the web's src/lib/shipment.js.
  * "Bangladesh warehouse" is the stage after BD customs and is shown as

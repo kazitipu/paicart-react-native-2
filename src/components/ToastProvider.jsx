@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, Keyboard } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { subscribe } from '@/lib/toast';
 import colors from '@/theme/colors';
@@ -16,6 +16,18 @@ const ACCENT = {
 export default function ToastProvider() {
   const [items, setItems] = useState([]);
   const insets = useSafeAreaInsets();
+  /* Toasts sit near the bottom edge, which the keyboard covers — a coupon
+     or form error raised while typing was shown but invisible. Lift them
+     above the keyboard while it is open. */
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', (e) => setKb(e.endCoordinates?.height || 0));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKb(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const dismiss = useCallback((id) => {
     setItems((prev) => prev.filter((t) => t.id !== id));
@@ -32,7 +44,10 @@ export default function ToastProvider() {
     <View
       pointerEvents="box-none"
       className="absolute left-0 right-0 items-center px-4"
-      style={{ bottom: insets.bottom + 78 }}
+      /* Above every sheet: Overlay panels use elevation up to 80, and on
+         Android elevation beats sibling order, so a toast fired from inside a
+         sheet ("Image saved to gallery!") was drawn underneath it. */
+      style={{ bottom: kb > 0 ? kb + 16 : insets.bottom + 78, zIndex: 1000, elevation: 1000 }}
     >
       {items.map((t) => (
         <Pressable

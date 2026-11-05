@@ -6,9 +6,15 @@ import { ScrollView, Pressable, Text, View } from 'react-native';
    [{ key, label, count }]. */
 export default function Tabs({ items, value, onChange, className = '' }) {
   return (
+    /* A ScrollView's base style is flexGrow: 1 / flexShrink: 1, even when
+       horizontal. In a flex-1 column next to a FlatList (the list screens'
+       scroll={false} layout) that made the tab strip take half the leftover
+       height — the ~150dp blank band between the tabs and the first card.
+       flexGrow: 0 keeps it at its content height. */
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={{ flexGrow: 0, flexShrink: 0 }}
       className={`border-b border-gray-100 ${className}`}
       contentContainerClassName="px-3"
     >

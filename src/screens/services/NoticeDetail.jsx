@@ -47,13 +47,13 @@ export default function NoticeDetail() {
         <ScrollView contentContainerClassName="p-3 pb-10">
           <View className="bg-white rounded-2xl border border-gray-100 p-4">
             <Text className="text-md font-bold text-foreground">
-              {notice.title || notice.subject}
+              {notice.noticeTitle || notice.title || notice.subject || 'Notice'}
             </Text>
             {!!notice.date && <Text className="text-2xs text-gray-400 mt-1">{notice.date}</Text>}
             {/* Whitespace is preserved — the admin composes these as plain
                 text with its own line breaks. */}
             <Text className="text-smd text-gray-600 leading-relaxed mt-3">
-              {notice.body || notice.description || notice.message}
+              {notice.noticeBody || notice.body || notice.description || notice.message}
             </Text>
           </View>
         </ScrollView>

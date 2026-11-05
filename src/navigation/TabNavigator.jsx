@@ -1,15 +1,19 @@
 import React, { useMemo } from 'react';
-import { View, Text, Image, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector } from 'react-redux';
 import { LayoutGrid, ShoppingCart, ShoppingBag, Menu } from 'lucide-react-native';
 import { TABS } from './routes';
-import { makeTabStack } from './RootNavigator';
-import colors from '@/theme/colors';
+import { makeTabStack } from './makeTabStack';
+import TabBar from './TabBar';
 
 const Tab = createBottomTabNavigator();
 
-const HOME_ICON = require('@/assets/paicart_icon.png');
+const TAB_ICONS = {
+  [TABS.CATEGORY]: LayoutGrid,
+  [TABS.CART]: ShoppingCart,
+  [TABS.ORDERS]: ShoppingBag,
+  [TABS.MORE]: Menu,
+};
 
 /* The web app's BottomNav summed quantities across the shop → items → skus
    tree on every render. Memoised here because the tab bar is mounted for the
@@ -30,30 +34,6 @@ function useCartCount() {
   );
 }
 
-function Badge({ count }) {
-  if (!count) return null;
-  return (
-    <View
-      className="absolute -top-1.5 -right-2.5 bg-primary rounded-full min-w-4 h-4 px-1 items-center justify-center"
-      pointerEvents="none"
-    >
-      <Text className="text-white text-2xs font-bold leading-none">
-        {count > 99 ? '99+' : count}
-      </Text>
-    </View>
-  );
-}
-
-const withBadge = (Icon, count) =>
-  function TabIcon({ color, size }) {
-    return (
-      <View>
-        <Icon color={color} size={size} />
-        <Badge count={count} />
-      </View>
-    );
-  };
-
 /* Stacks are created once at module scope — building them inside render would
    remount every screen in the tab on each tab-bar re-render (i.e. every cart
    change), losing scroll position and in-progress forms. */
@@ -63,6 +43,15 @@ const HomeStack = makeTabStack(TABS.HOME, 'Home');
 const OrdersStack = makeTabStack(TABS.ORDERS, 'DashboardOverview');
 const MoreStack = makeTabStack(TABS.MORE, 'More');
 
+/* First screen of each tab — a tab press always returns there (TabBar). */
+const INITIAL_SCREENS = {
+  [TABS.CATEGORY]: 'Categories',
+  [TABS.CART]: 'Cart',
+  [TABS.HOME]: 'Home',
+  [TABS.ORDERS]: 'DashboardOverview',
+  [TABS.MORE]: 'More',
+};
+
 export default function TabNavigator() {
   const cartCount = useCartCount();
 
@@ -71,53 +60,38 @@ export default function TabNavigator() {
       /* Home is the middle tab, matching the web BottomNav's
          Category · Cart · Home · My Orders · WhatsApp order. */
       initialRouteName={TABS.HOME}
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#9ca3af',
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#f3f4f6',
-          height: Platform.OS === 'ios' ? 84 : 62,
-          paddingTop: 6,
-        },
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
-      }}
+      /* Android back from another tab returns to Home; from Home it leaves
+         the app. (The default went to the FIRST tab — Category.) */
+      backBehavior="initialRoute"
+      screenOptions={{ headerShown: false }}
+      tabBar={(props) => (
+        <TabBar
+          {...props}
+          icons={TAB_ICONS}
+          initialScreens={INITIAL_SCREENS}
+          badges={{ [TABS.CART]: cartCount }}
+        />
+      )}
     >
       <Tab.Screen
         name={TABS.CATEGORY}
         component={CategoryStack}
-        options={{
-          title: 'Category',
-          tabBarIcon: ({ color, size }) => <LayoutGrid color={color} size={size} />,
-        }}
+        options={{ title: 'Category' }}
       />
       <Tab.Screen
         name={TABS.CART}
         component={CartStack}
-        options={{ title: 'Cart', tabBarIcon: withBadge(ShoppingCart, cartCount) }}
+        options={{ title: 'Cart' }}
       />
       <Tab.Screen
         name={TABS.HOME}
         component={HomeStack}
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ size }) => (
-            <Image
-              source={HOME_ICON}
-              style={{ width: size, height: size }}
-              resizeMode="contain"
-            />
-          ),
-        }}
+        options={{ title: 'Home' }}
       />
       <Tab.Screen
         name={TABS.ORDERS}
         component={OrdersStack}
-        options={{
-          title: 'My Orders',
-          tabBarIcon: ({ color, size }) => <ShoppingBag color={color} size={size} />,
-        }}
+        options={{ title: 'My Orders' }}
       />
       {/* The web's fifth tab opened a WhatsApp sheet. A phone has no footer, so
           this tab also has to house everything the web Footer linked to — the
@@ -126,10 +100,7 @@ export default function TabNavigator() {
       <Tab.Screen
         name={TABS.MORE}
         component={MoreStack}
-        options={{
-          title: 'More',
-          tabBarIcon: ({ color, size }) => <Menu color={color} size={size} />,
-        }}
+        options={{ title: 'More' }}
       />
     </Tab.Navigator>
   );

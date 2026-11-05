@@ -60,6 +60,7 @@ import {
   getDownloadURL,
 } from '@react-native-firebase/storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { remove, KEYS } from './storage';
 
 const app = getApp();
 
@@ -102,8 +103,12 @@ export const signInWithGoogle = async () => {
 };
 
 /* Google keeps its own session alongside Firebase's; signing out of only one
-   leaves the account silently re-selected on the next attempt. */
+   leaves the account silently re-selected on the next attempt. Also forgets
+   the phone-OTP number (the web Header's clearPhoneLogin() on sign out) —
+   inlined via storage rather than imported from firebaseUtils, which imports
+   this module. */
 export const signOutEverywhere = async () => {
+  remove(KEYS.PHONE_LOGIN);
   try {
     await GoogleSignin.signOut();
   } catch {

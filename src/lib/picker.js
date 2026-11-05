@@ -10,7 +10,7 @@
  * The returned shape is what `describeUpload` in firebaseUtils expects.
  */
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import { Alert } from 'react-native';
+import { Alert, PermissionsAndroid, Platform } from 'react-native';
 
 const BASE_OPTIONS = {
   mediaType: 'photo',
@@ -45,28 +45,62 @@ const firstAsset = (result) => {
 export const pickImageFromLibrary = async (options = {}) =>
   firstAsset(await launchImageLibrary({ ...BASE_OPTIONS, ...options }));
 
-export const takePhoto = async (options = {}) =>
-  firstAsset(await launchCamera({ ...BASE_OPTIONS, ...options }));
+/* The manifest declares CAMERA (for the document scanners), and once it is
+   declared Android refuses launchCamera until the permission is granted at
+   runtime — so ask first. A denial resolves to null like a cancel; a
+   permanent denial ("Don't ask again") says where to turn it back on. */
+const ensureCameraPermission = async () => {
+  if (Platform.OS !== 'android') return true;
+  const perm = PermissionsAndroid.PERMISSIONS.CAMERA;
+  if (await PermissionsAndroid.check(perm)) return true;
+  const res = await PermissionsAndroid.request(perm);
+  if (res === PermissionsAndroid.RESULTS.GRANTED) return true;
+  if (res === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+    Alert.alert('Camera access is off', 'Allow camera access for Paicart in your phone Settings to take photos.');
+  }
+  return false;
+};
+
+export const takePhoto = async (options = {}) => {
+  if (!(await ensureCameraPermission())) return null;
+  return firstAsset(await launchCamera({ ...BASE_OPTIONS, ...options }));
+};
 
 /* Camera-or-gallery chooser. The web had no equivalent — a file input on
-   mobile browsers delegates this to the OS — so it is presented explicitly. */
+   mobile browsers delegates this to the OS — so it is presented explicitly.
+
+   It used to be a stock Alert. Now PhotoSourceSheet (mounted once in App,
+   like ToastProvider) registers itself here and draws a branded bottom
+   sheet; every caller keeps awaiting pickImage() unchanged. The Alert stays
+   as a fallback for the instant before the sheet has mounted. */
+let presentSheet = null;
+export const registerPhotoSourceSheet = (fn) => {
+  presentSheet = fn;
+  return () => {
+    if (presentSheet === fn) presentSheet = null;
+  };
+};
+
 export const pickImage = (options = {}) =>
   new Promise((resolve, reject) => {
+    const choose = (source) => {
+      if (source === 'camera') takePhoto(options).then(resolve, reject);
+      else if (source === 'library') pickImageFromLibrary(options).then(resolve, reject);
+      else resolve(null);
+    };
+    if (presentSheet) {
+      presentSheet({ title: options.title, subtitle: options.subtitle }, choose);
+      return;
+    }
     Alert.alert(
       options.title || 'Add a photo',
       undefined,
       [
-        {
-          text: 'Take Photo',
-          onPress: () => takePhoto(options).then(resolve, reject),
-        },
-        {
-          text: 'Choose from Library',
-          onPress: () => pickImageFromLibrary(options).then(resolve, reject),
-        },
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+        { text: 'Take Photo', onPress: () => choose('camera') },
+        { text: 'Choose from Library', onPress: () => choose('library') },
+        { text: 'Cancel', style: 'cancel', onPress: () => choose(null) },
       ],
-      { cancelable: true, onDismiss: () => resolve(null) },
+      { cancelable: true, onDismiss: () => choose(null) },
     );
   });
 

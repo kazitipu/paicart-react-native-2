@@ -9,6 +9,7 @@
  * legitimately mix campaign and non-campaign items, so the discount is summed
  * per item, never applied once to the basket total.
  */
+import { toWebAddress } from '@/lib/address';
 
 export const getItemTotal = (item) =>
   (item.skus || []).reduce(
@@ -153,7 +154,9 @@ export function buildOrderDocs(pendingOrders, ctx) {
       shipmentStatusScore: 1,
       websiteName: '1688.com',
       currency: taka,
-      deliveryAddress: defaultShipping,
+      /* Web schema (lib/address) — an entry left in the old RN shape is
+         rewritten so the admin panel finds mobileNo / thana / areaObj. */
+      deliveryAddress: defaultShipping ? toWebAddress(defaultShipping) : defaultShipping,
       deliveryCharge: deliveryCharges[shop.shopId] ?? 100,
     };
   });

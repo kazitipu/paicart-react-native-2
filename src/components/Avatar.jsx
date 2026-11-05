@@ -4,7 +4,6 @@ import { Camera } from 'lucide-react-native';
 import { toast } from '@/lib/toast';
 import { uploadShipForMeFile, updateUser } from '@/lib/firebaseUtils';
 import { pickImage } from '@/lib/picker';
-import colors from '@/theme/colors';
 
 /* The user's photoURL if set, otherwise a circle with their initial. Pass
    `editable` to turn it into a tap-to-upload control — used on the dashboard
@@ -21,6 +20,11 @@ export default function Avatar({
   ringClass = 'border-2 border-white/30',
   bgClass = 'bg-white/20',
   roundedClass = 'rounded-2xl',
+  /* Raw-style overrides for ported screens: the initial's colour (the web
+     inherits it from the parent, so it is not always white) and extras for
+     the ring box (e.g. a Tailwind shadow as an RN boxShadow string). */
+  textStyle,
+  ringStyle,
 }) {
   const [uploading, setUploading] = useState(false);
   const initial = user?.displayName?.[0]?.toUpperCase() || 'U';
@@ -51,6 +55,7 @@ export default function Avatar({
     <View className={`relative ${sizeClass}`}>
       <View
         className={`${sizeClass} ${roundedClass} ${bgClass} ${ringClass} items-center justify-center overflow-hidden`}
+        style={ringStyle}
       >
         {uploading ? (
           <ActivityIndicator size="small" color="#ffffff" />
@@ -63,7 +68,9 @@ export default function Avatar({
             resizeMode="cover"
           />
         ) : (
-          <Text className={`${textClass} font-extrabold text-white`}>{initial}</Text>
+          <Text className={`${textClass} font-extrabold text-white`} style={textStyle}>
+            {initial}
+          </Text>
         )}
       </View>
 
@@ -72,15 +79,10 @@ export default function Avatar({
           onPress={handlePick}
           hitSlop={8}
           className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border border-gray-100 items-center justify-center"
-          style={{
-            shadowColor: '#000',
-            shadowOpacity: 0.15,
-            shadowRadius: 3,
-            shadowOffset: { width: 0, height: 1 },
-            elevation: 2,
-          }}
+          /* shadow-md, and the web's text-gray-600 camera glyph */
+          style={{ boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)' }}
         >
-          <Camera size={11} color={colors.foreground} />
+          <Camera size={11} color="#4b5563" />
         </Pressable>
       )}
     </View>

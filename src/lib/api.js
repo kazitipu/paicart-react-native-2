@@ -18,17 +18,12 @@ export const ALGLIMITED_BASE = 'https://alglimited.com/api/v1';
 /* Paicart's own backend: OTP SMS and the bKash gateway. */
 export const PAICART_API_BASE = 'https://paicart.com/api/v1';
 
-/* RedX courier.
- *
- * ⚠️ The web called this directly from the browser with a bearer token
- * hardcoded in the page source (place-order line 36). Shipping a static
- * bearer token inside an APK is worse than shipping it in a web bundle — an
- * APK is trivially unpacked and the token cannot be rotated without a store
- * release. `REDX_PROXY_BASE` is where a paicart.com endpoint should sit; until
- * that exists the calls degrade gracefully rather than embedding a secret.
- * Tracked as issue #1 in MIGRATION.md. */
+/* RedX courier — called directly with the same API token the web app
+ * ships in its page source (owner-approved, 2026-11-04). The token is in the
+ * APK; rotating it needs an app release, so keep it in this one place. */
 export const REDX_BASE = 'https://openapi.redx.com.bd/v1.0.0-beta';
-export const REDX_PROXY_BASE = null;
+const REDX_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3Njg5NDEiLCJpYXQiOjE3NTM4ODAxNTksImlzcyI6IkZVT2VESWVSZzlwdDRmeGUzSmRYb2tmNnZPYVFBYk1TIiwic2hvcF9pZCI6NzY4OTQxLCJ1c2VyX2lkIjoxMTY3ODQ1fQ.hDlvRuwKit8rpfz2ETnsfPW2lXT-JZS_2ZBZsMdvTfk';
+const redx = axios.create({ baseURL: REDX_BASE, timeout: 12000, headers: { 'API-ACCESS-TOKEN': REDX_TOKEN } });
 
 export const alg = axios.create({ baseURL: ALG_BASE, timeout: 15000 });
 export const algLimited = axios.create({ baseURL: ALGLIMITED_BASE, timeout: 15000 });
@@ -56,8 +51,9 @@ export const searchProducts = (keyword, { framePosition = 1, filterByCategory = 
     timeout: 12000,
   });
 
-export const searchByImage = (imageUrl, params = {}) =>
-  alg.get('/products/search-by-image', { params: { imageUrl, ...params } });
+/* The upstream expects the uploaded image's id as `imgId` (web: same). */
+export const searchByImage = (imgId, params = {}) =>
+  alg.get('/products/search-by-image', { params: { imgId, ...params } });
 
 export const getVendorProducts = (params) => alg.get('/products/vendor-products', { params });
 
@@ -87,18 +83,22 @@ export const sendOtpSms = (phoneNumber) => paicartApi.get(`/otp-sms-send/${phone
 
 /* ── RedX courier ── */
 
-/* Returns null rather than throwing when no proxy is configured, so checkout
-   falls back to its default delivery charge instead of blocking the order. */
+/* Returns null instead of throwing, so checkout falls back to its default
+   delivery charge rather than blocking the order. */
 export const getRedxCharge = async (params) => {
-  if (!REDX_PROXY_BASE) return null;
-  const { data } = await axios.get(`${REDX_PROXY_BASE}/charge/charge_calculator`, { params });
-  return data;
+  try {
+    const { data } = await redx.get('/charge/charge_calculator', { params });
+    return data;
+  } catch {
+    return null;
+  }
 };
 
 export const getRedxAreas = async (districtName) => {
-  if (!REDX_PROXY_BASE) return [];
-  const { data } = await axios.get(`${REDX_PROXY_BASE}/areas`, {
-    params: { district_name: districtName },
-  });
-  return data?.areas || [];
+  try {
+    const { data } = await redx.get('/areas', { params: { district_name: districtName } });
+    return data?.areas || [];
+  } catch {
+    return [];
+  }
 };

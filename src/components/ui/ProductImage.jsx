@@ -41,6 +41,10 @@ export default function ProductImage({
       className={className}
       style={style}
       resizeMode={resizeMode}
+      /* Android decodes at the displayed size rather than the original
+         (1688 photos are often 800–1500px shown in a ~180px tile). Cuts
+         bitmap memory and GC pauses while scrolling; ignored on iOS. */
+      resizeMethod="resize"
       onError={() => setFailed(true)}
     />
   );

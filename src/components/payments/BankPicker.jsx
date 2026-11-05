@@ -1,66 +1,104 @@
 import React from 'react';
-import { View, Text, Image, Pressable } from 'react-native';
+import { View, Text, Image } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Check, Copy } from 'lucide-react-native';
+import { C, Press } from '@/components/product/ui';
+import { TS, tpx } from '@/components/cart/CartBits';
 import { BANK_ACCOUNTS } from '@/lib/payments';
 import { toast } from '@/lib/toast';
-import colors from '@/theme/colors';
+import { PAY } from './PaymentSheet';
 
-/* Bank / bKash destination picker for manual deposits. The account number gets
-   its own copy button — on the web people selected the text; on a phone that
-   is fiddly and mistyping an account number loses a payment. */
-export default function BankPicker({ value, onChange }) {
+/* The Direct Deposit account list (web: BANK_ACCOUNTS.map … inside a
+   space-y-2 div). Each row: p-3 rounded-2xl border-2, teal-600 border +
+   teal-50 fill when chosen, 48px logo tile, name / account name / account no
+   (font-mono) / routing · branch, and a 20px radio.
+
+   Native addition: a copy button beside the account number — on the web
+   people selected the text; on a phone that is fiddly and mistyping an
+   account number loses a payment.
+
+   `children` render after the rows inside the same gap-8 list (the web puts
+   <ManualBkashTotal> there in three of the four sheets). */
+export default function BankPicker({ method, onSelect, children }) {
   return (
-    <View>
+    <View style={{ gap: 8 }}>
       {BANK_ACCOUNTS.map((b) => {
-        const selected = value === b.key;
+        const on = method === b.key;
         return (
-          <Pressable
+          <Press
             key={b.key}
-            onPress={() => onChange(b.key)}
-            className="flex-row items-center gap-3 p-3 rounded-2xl border-2 mb-2"
-            style={
-              selected
-                ? { borderColor: colors.tealDeep, backgroundColor: '#f0fdfa' }
-                : { borderColor: '#e2e8f0', backgroundColor: '#f8fafc' }
-            }
+            onPress={() => onSelect(b.key)}
+            style={({ pressed }) => ({
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              padding: 12,
+              borderRadius: 16,
+              borderWidth: 2,
+              borderColor: on ? PAY.TEAL_DEEP : PAY.SLATE200,
+              backgroundColor: on ? '#f0fdfa' : pressed ? PAY.SLATE100 : '#f8fafc',
+            })}
           >
-            <View className="w-12 h-12 rounded-xl overflow-hidden bg-white border border-gray-100 items-center justify-center p-1">
-              <Image source={b.logo} className="w-full h-full" resizeMode="contain" />
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                overflow: 'hidden',
+                backgroundColor: '#ffffff',
+                borderWidth: 1,
+                borderColor: C.gray100,
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 4,
+              }}
+            >
+              <Image source={b.logo} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
             </View>
-            <View className="flex-1">
-              <Text className="text-tiny font-extrabold text-gray-800">{b.name}</Text>
-              <Text className="text-xxs text-gray-500">{b.acName}</Text>
-              <View className="flex-row items-center gap-1.5">
-                <Text className="text-3xs font-bold text-gray-700">{b.acNo}</Text>
-                <Pressable
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[TS.xs, { fontWeight: '800', color: C.gray800 }]}>{b.name}</Text>
+              <Text style={[tpx(10), { color: C.gray500 }]}>{b.acName}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={[tpx(11), { fontFamily: 'monospace', fontWeight: '700', color: C.gray700 }]}>{b.acNo}</Text>
+                <Press
                   hitSlop={8}
+                  accessibilityLabel="Copy account number"
                   onPress={() => {
                     Clipboard.setString(b.acNo);
                     toast.success('Account number copied');
                   }}
                 >
-                  <Copy size={11} color={colors.muted} />
-                </Pressable>
+                  {({ pressed }) => <Copy size={11} color={pressed ? PAY.TEAL_DEEP : C.gray400} />}
+                </Press>
               </View>
-              <Text className="text-xxs text-gray-400">
+              <Text style={[tpx(10), { color: C.gray400 }]}>
                 {b.routing}
                 {b.branch ? ` · ${b.branch}` : ''}
               </Text>
             </View>
             <View
-              className="w-5 h-5 rounded-full border-2 items-center justify-center"
-              style={
-                selected
-                  ? { borderColor: colors.teal, backgroundColor: colors.teal }
-                  : { borderColor: '#d1d5db' }
-              }
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: 10,
+                borderWidth: 2,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderColor: on ? PAY.TEAL500 : C.gray300,
+                backgroundColor: on ? PAY.TEAL500 : 'transparent',
+              }}
             >
-              {selected && <Check size={10} color="#ffffff" strokeWidth={3} />}
+              {on && (
+                <Animated.View entering={ZoomIn.duration(140)}>
+                  <Check size={10} color="#ffffff" strokeWidth={3} />
+                </Animated.View>
+              )}
             </View>
-          </Pressable>
+          </Press>
         );
       })}
+      {children}
     </View>
   );
 }

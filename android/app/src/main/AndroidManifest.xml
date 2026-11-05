@@ -11,6 +11,9 @@
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- WRITE_EXTERNAL_STORAGE (for saving product media to the gallery on
+         API 24–28) is merged in from react-native-image-crop-picker
+         (maxSdkVersion 29); declaring it here too breaks the manifest merge. -->
 
     <!-- The catalogue links out to WhatsApp and to supplier documents. -->
     <queries>

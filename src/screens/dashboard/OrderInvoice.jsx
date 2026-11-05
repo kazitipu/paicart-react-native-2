@@ -1,226 +1,227 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRoute } from '@react-navigation/native';
-import InvoiceShell, {
-  InvoiceRow, InvoiceDivider, InvoiceSection, InvoiceBadge,
-} from '@/components/InvoiceShell';
-import { getSingleOrderApi, getSingleProductRequest } from '@/lib/firebaseUtils';
+import { useSelector } from 'react-redux';
+import InvoicePage from '@/components/invoice/InvoicePage';
 import {
-  getGoodsTotal, getTotalPaid, getTotalDue, getOfferDiscount,
-} from '@/lib/orderMath';
+  InvoiceSummary, InvoiceParties, InvoiceSection, InvoiceItemsTable, InvoiceTotals, InvoiceRow, InvoiceDivider,
+  InvoiceDueRow, InvoicePayments, InvoiceNotes, INVOICE_TERMS, invoiceStatusOf, billToFromAddress, billToFromUser, tk,
+} from '@/components/invoice/InvoiceParts';
+import { getSingleOrderApi, getSingleProductRequest } from '@/lib/firebaseUtils';
+import { getTotalPaid, getTotalDue, getGoodsTotal, getSingleShopTotal, getOfferDiscount } from '@/lib/orderMath';
+import { enBDDate } from '@/components/orders/OrderBits';
 import { statusDisplay } from '@/lib/shipment';
 
-const money = (n) => `৳${Math.round(n).toLocaleString()}`;
+/* ═══════════════════════════════════════════════════════════════════════
+   Web pages/dashboard/buy-and-ship-for/invoice/[bookingId]/page.jsx — one
+   page for both a 1688 order and a product request. The web picks the body
+   from `?productRequest=true`; here it is the `kind: 'productRequest'`
+   param (a deep link's `productRequest=true` query works too). With neither,
+   the id is read as an order, and — beyond the web, for links that lost the
+   flag — as a product request if no order has it.
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* Dual-mode, as on the web: the same id can name an order or a product
-   request, so the caller says which via `kind`. The web read a query-string
-   flag for this; here it is a navigation param, and it falls back to trying
-   the order first then the request — a deep link from an email may not carry
-   the flag. */
+/* toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) → "04 Nov 2026" */
+const fmtDate = (ms) => (ms ? enBDDate(ms) : '');
+
+/* ── 1688 order — one line per SKU ── */
+function OrderInvoiceBody({ order }) {
+  const totalPaid = getTotalPaid(order);
+  const totalDue = getTotalDue(order);
+  const goodsTotal = getGoodsTotal(order);
+  const hasShipping = parseInt(order.shippingChargeCustomer, 10) > 0;
+  const totalBill = totalDue + totalPaid;
+
+  const items = [];
+  order.items?.forEach((item) => {
+    item.skus?.forEach((sku) => {
+      const qty = parseInt(sku.totalQuantity || 0, 10);
+      const unitPrice = parseInt(parseFloat(sku.price || 0), 10);
+      items.push({ name: item.name, meta: [sku.color, sku.size].filter(Boolean).join(' / '), qty, unitPrice, amount: qty * unitPrice });
+    });
+  });
+  const totalQty = items.reduce((a, l) => a + l.qty, 0);
+  const offer = getOfferDiscount(order);
+
+  return (
+    <>
+      <InvoiceSummary total={totalBill} paid={totalPaid} due={totalDue} />
+      <InvoiceParties
+        billTo={billToFromAddress(order.deliveryAddress)}
+        details={[
+          { label: 'Order ID', value: `#${order.orderId}` },
+          { label: 'Order Date', value: fmtDate(order.time) },
+          { label: 'Seller', value: order.shopName },
+          { label: 'Shipment', value: order.shipmentMethod || 'Air' },
+          { label: 'Status', value: statusDisplay(order.orderStatus) },
+          { label: 'Tracking No', value: order.trackingNo && order.trackingNo !== '0' ? order.trackingNo : '' },
+        ]}
+      />
+
+      <InvoiceSection title={`Items (${totalQty} pcs)`}>
+        <InvoiceItemsTable items={items} />
+        <InvoiceTotals>
+          <InvoiceRow label="Product Subtotal" value={tk(goodsTotal)} />
+          <InvoiceRow label="China Local Delivery" value={parseInt(order.localShipping, 10) > 0 ? tk(order.localShipping) : '—'} />
+          <InvoiceRow label="Shipping (CN → BD)" value={hasShipping ? tk(order.shippingChargeCustomer) : 'On actual weight'} />
+          {parseInt(order.otherCost, 10) > 0 && <InvoiceRow label="Packaging & Other" value={`+${tk(order.otherCost)}`} />}
+          {parseInt(order.siteDiscountAmount, 10) > 0 && (
+            <InvoiceRow label={`Site Discount (${order.siteDiscountPercent}%)`} value={`-${tk(order.siteDiscountAmount)}`} tone="green" />
+          )}
+          {parseInt(order.couponAmount, 10) > 0 && <InvoiceRow label="Coupon" value={`-${tk(order.couponAmount)}`} tone="green" />}
+          {parseInt(order.discount, 10) > 0 && <InvoiceRow label="Discount (on shipping)" value={`-${tk(order.discount)}`} tone="green" />}
+          {offer > 0 && (
+            <InvoiceRow
+              label={`Pay-now Discount${order.offerPayNowPercent ? ` (${parseFloat(order.offerPayNowPercent)}%)` : ''}`}
+              value={`-${tk(offer)}`}
+              tone="green"
+            />
+          )}
+          <InvoiceDivider />
+          <InvoiceRow bold label="Total Bill" value={tk(totalBill)} />
+          {totalPaid > 0 && <InvoiceRow label="Paid" value={`-${tk(totalPaid)}`} tone="green" />}
+          {parseFloat(order.refund) > 0 && <InvoiceRow label="Refunded" value={tk(order.refund)} hint="(returned to you)" />}
+          <InvoiceDueRow due={totalDue} />
+        </InvoiceTotals>
+      </InvoiceSection>
+
+      <InvoicePayments payments={order.payments} />
+      <InvoiceNotes notes={[order.additionalNotes && `Note: ${order.additionalNotes}`]} terms={INVOICE_TERMS} />
+    </>
+  );
+}
+
+/* ── Product request — one quoted line ── */
+function ProductRequestInvoiceBody({ booking, user }) {
+  const totalPaid = getTotalPaid(booking);
+  const totalDue = getTotalDue(booking);
+  const hasShipping = parseInt(booking.shippingChargeCustomer, 10) > 0;
+  const base = booking.actualTotal ? parseInt(booking.actualTotal, 10) : getSingleShopTotal(booking);
+  const grandTotal = totalDue + totalPaid;
+  const qty = parseInt(booking.productQuantity, 10) || null;
+  const offer = getOfferDiscount(booking);
+
+  return (
+    <>
+      <InvoiceSummary total={grandTotal} paid={totalPaid} due={totalDue} />
+      <InvoiceParties
+        billTo={billToFromUser(user)}
+        details={[
+          { label: 'Request ID', value: `#${booking.bookingId}` },
+          { label: 'Request Date', value: booking.date || fmtDate(booking.time) },
+          { label: 'Store', value: [booking.store, booking.country].filter(Boolean).join(' · ') },
+          { label: 'Shipment', value: (booking.shipmentMethod || 'Air') === 'Sea' ? 'By Sea' : 'By Air' },
+          { label: 'Status', value: statusDisplay(booking.orderStatus || booking.status) },
+          { label: 'Tracking No', value: booking.trackingNo && booking.trackingNo !== '0' ? booking.trackingNo : '' },
+        ]}
+      />
+
+      <InvoiceSection title="Items">
+        <InvoiceItemsTable
+          items={[
+            {
+              name: booking.productType || 'Requested product',
+              meta: booking.productVariant,
+              qty,
+              unitPrice: qty && base ? Math.round(base / qty) : null,
+              amount: base || null,
+            },
+          ]}
+        />
+        <InvoiceTotals>
+          <InvoiceRow label="Product Price" value={base > 0 ? tk(base) : '—'} />
+          <InvoiceRow label="China Local Courier" value={parseInt(booking.localShipping, 10) > 0 ? tk(booking.localShipping) : '—'} />
+          {hasShipping ? (
+            <InvoiceRow
+              label="Shipping (CN → BD)"
+              hint={booking.receivedWeight && booking.customerRate ? `(${booking.receivedWeight} kg × ৳${booking.customerRate})` : ''}
+              value={tk(booking.shippingChargeCustomer)}
+            />
+          ) : (
+            <InvoiceRow label="Shipping (CN → BD)" value="On actual weight" />
+          )}
+          {parseInt(booking.otherCost, 10) > 0 && <InvoiceRow label="Packaging & Other" value={`+${tk(booking.otherCost)}`} />}
+          {parseInt(booking.discount, 10) > 0 && <InvoiceRow label="Discount" value={`-${tk(booking.discount)}`} tone="green" />}
+          {offer > 0 && <InvoiceRow label="Pay-now Discount" value={`-${tk(offer)}`} tone="green" />}
+          <InvoiceDivider />
+          <InvoiceRow bold label="Total Bill" value={tk(grandTotal)} />
+          {totalPaid > 0 && <InvoiceRow label="Paid" value={`-${tk(totalPaid)}`} tone="green" />}
+          {parseFloat(booking.refund) > 0 && <InvoiceRow label="Refunded" value={tk(booking.refund)} hint="(returned to you)" />}
+          <InvoiceDueRow due={totalDue} />
+        </InvoiceTotals>
+      </InvoiceSection>
+
+      <InvoicePayments payments={booking.payments} />
+      <InvoiceNotes notes={[booking.note && `Note: ${booking.note}`]} terms={INVOICE_TERMS} />
+    </>
+  );
+}
+
 export default function OrderInvoice() {
   const route = useRoute();
-  const { bookingId, kind } = route.params || {};
+  const { bookingId, kind, productRequest } = route.params || {};
+  const currentUser = useSelector((s) => s.user?.currentUser);
+  const flaggedRequest = kind === 'productRequest' || productRequest === true || productRequest === 'true';
 
-  const [record, setRecord] = useState(null);
-  const [isRequest, setIsRequest] = useState(kind === 'productRequest');
+  const [isProductRequest, setIsProductRequest] = useState(flaggedRequest);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchRecord = useCallback(async () => {
+    const id = String(bookingId);
+    if (flaggedRequest) return { record: (await getSingleProductRequest(id)) || null, request: true };
+    const order = await getSingleOrderApi(id);
+    if (order) return { record: order, request: false };
+    if (kind === 'order') return { record: null, request: false };
+    const req = await getSingleProductRequest(id);
+    return req ? { record: req, request: true } : { record: null, request: false };
+  }, [bookingId, kind, flaggedRequest]);
 
   useEffect(() => {
+    if (!bookingId) return undefined;
     let alive = true;
-    (async () => {
-      try {
-        if (kind === 'productRequest') {
-          const r = await getSingleProductRequest(bookingId);
-          if (alive) {
-            setRecord(r || null);
-            setIsRequest(true);
-          }
-        } else {
-          const o = await getSingleOrderApi(bookingId);
-          if (o) {
-            if (alive) {
-              setRecord(o);
-              setIsRequest(false);
-            }
-          } else {
-            const r = await getSingleProductRequest(bookingId);
-            if (alive) {
-              setRecord(r || null);
-              setIsRequest(true);
-            }
-          }
-        }
-      } catch {
-        /* handled by notFound */
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+    setLoading(true);
+    fetchRecord()
+      .then(({ record, request }) => {
+        if (!alive) return;
+        setData(record);
+        setIsProductRequest(request);
+      })
+      .catch(() => alive && setData(null))
+      .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [bookingId, kind]);
+  }, [bookingId, fetchRecord]);
 
-  const rows = useMemo(() => {
-    if (!record) return [];
-    if (isRequest) {
-      const total = parseInt(record.totalAmount ?? record.amount ?? 0, 10) || 0;
-      const paid = (record.payments || []).reduce(
-        (a, p) => a + (parseInt(p.amount, 10) || 0),
-        0,
-      );
-      return [
-        { label: 'Request total', value: total, bold: true },
-        ...(paid > 0 ? [{ label: 'Paid', value: -paid, tone: 'green' }] : []),
-        {
-          label: total - paid > 0 ? 'Balance due' : 'Fully paid',
-          value: total - paid > 0 ? total - paid : paid,
-          bold: true,
-          tone: total - paid > 0 ? 'due' : 'green',
-        },
-      ];
-    }
-
-    const goods = getGoodsTotal(record);
-    const paid = getTotalPaid(record);
-    const due = Math.max(0, getTotalDue(record));
-    const offer = getOfferDiscount(record);
-    return [
-      { label: 'Goods', value: goods },
-      ...(record.shippingChargeCustomer > 0
-        ? [{ label: 'International freight', value: parseInt(record.shippingChargeCustomer, 10) }]
-        : []),
-      ...(record.localShipping > 0
-        ? [{ label: 'China local courier', value: parseInt(record.localShipping, 10) }]
-        : []),
-      ...(record.otherCost > 0 ? [{ label: 'Other cost', value: parseInt(record.otherCost, 10) }] : []),
-      ...(record.discount > 0
-        ? [{ label: 'Discount', value: -parseInt(record.discount, 10), tone: 'green' }]
-        : []),
-      ...(record.couponAmount > 0
-        ? [{ label: 'Coupon', value: -Math.round(record.couponAmount), tone: 'green' }]
-        : []),
-      ...(offer > 0 ? [{ label: 'Pay-now offer', value: -offer, tone: 'green' }] : []),
-      ...(paid > 0 ? [{ label: 'Paid', value: -paid, tone: 'green' }] : []),
-      {
-        label: due > 0 ? 'Balance due' : 'Fully paid',
-        value: due > 0 ? due : paid,
-        bold: true,
-        tone: due > 0 ? 'due' : 'green',
-      },
-    ];
-  }, [record, isRequest]);
-
-  const toHtml = () => {
-    if (!record) return '';
-    const row = (r) =>
-      `<tr><td>${r.bold ? `<b>${r.label}</b>` : r.label}</td><td style="text-align:right">${
-        r.bold ? `<b>${r.value < 0 ? '-' : ''}${money(Math.abs(r.value))}</b>` : `${r.value < 0 ? '-' : ''}${money(Math.abs(r.value))}`
-      }</td></tr>`;
-    return `<h2 style="color:#FF6A00;margin:0">Paicart</h2>
-<p style="color:#64748b;margin:4px 0 16px">${isRequest ? 'Product Request' : 'Order'} Invoice #${bookingId} · ${record.orderedDate || record.date || ''}</p>
-<table style="width:100%;border-collapse:collapse;font-size:13px">${rows.map(row).join('')}</table>
-<p style="color:#94a3b8;font-size:11px;margin-top:24px">support@paicart.com</p>`;
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchRecord()
+      .then(({ record, request }) => {
+        setData(record);
+        setIsProductRequest(request);
+      })
+      .catch(() => {})
+      .finally(() => setRefreshing(false));
   };
 
+  const settled = data ? getTotalDue(data) <= 0 && getTotalPaid(data) > 0 : false;
+
   return (
-    <InvoiceShell
-      docType={isRequest ? 'Product Request Invoice' : 'Order Invoice'}
+    <InvoicePage
+      backRoute={isProductRequest ? 'BuyShipMyRequests' : 'BuyShipMyOrders'}
+      docType={isProductRequest ? 'Product Request Invoice' : 'Order Invoice'}
       docId={bookingId}
-      docDate={record?.orderedDate || record?.date}
+      docDate={fmtDate(data?.time)}
+      status={data ? invoiceStatusOf(data) : null}
+      paid={settled}
       loading={loading}
-      notFound={!record}
-      toHtml={toHtml}
+      notFound={!data}
+      onRefresh={onRefresh}
+      refreshing={refreshing}
     >
-      {record && (
-        <>
-          <View className="flex-row gap-2 mb-4">
-            <InvoiceBadge
-              color={
-                record.paymentStatus === 'Paid'
-                  ? 'emerald'
-                  : record.paymentStatus === 'Partially Paid'
-                    ? 'orange'
-                    : 'gray'
-              }
-            >
-              {record.paymentStatus || 'Not Paid'}
-            </InvoiceBadge>
-            <InvoiceBadge
-              color={(record.orderStatus || record.status) === 'reject' ? 'red' : 'gray'}
-            >
-              {statusDisplay(record.orderStatus || record.status) || 'Pending'}
-            </InvoiceBadge>
-          </View>
-
-          {!isRequest && (record.items || []).length > 0 && (
-            <InvoiceSection title="Items">
-              {record.items.map((item, i) =>
-                (item.skus || []).map((sku, n) => (
-                  <InvoiceRow
-                    key={`${i}-${n}`}
-                    label={`${item.name}`}
-                    hint={`${[sku.color, sku.size].filter(Boolean).join(' / ') || 'Default'} × ${sku.totalQuantity}`}
-                    value={money(parseInt(sku.price, 10) * parseInt(sku.totalQuantity, 10))}
-                  />
-                )),
-              )}
-            </InvoiceSection>
-          )}
-
-          {isRequest && (
-            <InvoiceSection title="Request">
-              <InvoiceRow label="Product" value={record.productName || record.productType || '—'} />
-              <InvoiceRow label="Quantity" value={String(record.quantity || 1)} />
-              {!!record.variant && <InvoiceRow label="Variant" value={record.variant} />}
-            </InvoiceSection>
-          )}
-
-          <InvoiceSection title="Payment Breakdown">
-            {rows.map((r, i) => (
-              <React.Fragment key={r.label}>
-                {r.bold && i === rows.length - 1 && <InvoiceDivider />}
-                <InvoiceRow
-                  label={r.label}
-                  bold={r.bold}
-                  tone={r.tone}
-                  value={`${r.value < 0 ? '−' : ''}${money(Math.abs(r.value))}`}
-                />
-              </React.Fragment>
-            ))}
-          </InvoiceSection>
-
-          {(record.payments || []).length > 0 && (
-            <InvoiceSection title="Payment History">
-              {record.payments.map((p, i) => (
-                <InvoiceRow
-                  key={i}
-                  label={`${p.method || 'Payment'} — ${p.date || '—'}`}
-                  value={`+${money(parseInt(p.amount, 10) || 0)}`}
-                  tone="green"
-                />
-              ))}
-            </InvoiceSection>
-          )}
-
-          {!!record.deliveryAddress && (
-            <InvoiceSection title="Deliver To">
-              <Text className="text-smd text-foreground">
-                {record.deliveryAddress.name} · {record.deliveryAddress.phone}
-              </Text>
-              <Text className="text-2xs text-gray-500 mt-0.5">
-                {[
-                  record.deliveryAddress.address,
-                  record.deliveryAddress.area?.name,
-                  record.deliveryAddress.district,
-                ]
-                  .filter(Boolean)
-                  .join(', ')}
-              </Text>
-            </InvoiceSection>
-          )}
-        </>
-      )}
-    </InvoiceShell>
+      {!!data &&
+        (isProductRequest ? <ProductRequestInvoiceBody booking={data} user={currentUser} /> : <OrderInvoiceBody order={data} />)}
+    </InvoicePage>
   );
 }

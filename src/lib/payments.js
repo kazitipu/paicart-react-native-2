@@ -6,8 +6,8 @@
  * BANK_ACCOUNTS. They belong in lib.
  */
 import axios from 'axios';
-import { Linking } from 'react-native';
-import InAppBrowser from 'react-native-inappbrowser-reborn';
+import { navigationRef } from '@/navigation/navigationRef';
+import { toast } from '@/lib/toast';
 
 export const BANK_ACCOUNTS = [
   {
@@ -59,37 +59,121 @@ export const gatewayPayableTotal = (amount) => {
 
 export const BKASH_CREATE_PAYMENT_URL = 'https://paicart.com/api/v1/bkash/create-payment';
 
-/* Where the gateway sends the customer back to.
+/* ─── bKash checkout, entirely inside the app ───
  *
- * ⚠️ The web passed `window.location.href` — the page it was on. There is no
- * such page on mobile, so the gateway must redirect to this custom scheme
- * instead. THIS REQUIRES A BACKEND CHANGE: paicart.com's bkash create-payment
- * and its callback must accept and honour a `paicart://` URL. Until that
- * lands, the payment will complete on bKash's side but the app will not be
- * returned to. Tracked in MIGRATION.md. */
-export const PAYMENT_RETURN_URL = 'paicart://payment-return';
+ * The checkout page runs in our own WebView (screens/services/BkashCheckout)
+ * — never Chrome or a Custom Tab — so the customer cannot end up on the web
+ * site afterwards.
+ *
+ * bKash returns to paicart.com's /api/v1/bkash/payment/callback, which
+ * executes the payment and then redirects to our `url` with
+ * ?paymentStatus=&paymentId=. We pass a paicart.com URL (the server only
+ * honours its own origin), and the WebView intercepts that final redirect
+ * before it loads, closes itself and reports the result here. Any paicart.com
+ * URL carrying paymentStatus counts — including the homepage fallback the
+ * server uses for an expired session — so nothing ever renders the site.
+ *
+ * (The old flow passed paicart://payment-return. The live server rejected
+ * it — that support was never deployed — and sent customers to the
+ * homepage in the browser, which is the bug this replaces.) */
+export const BKASH_RETURN_URL = 'https://paicart.com/bkash/app-return';
+const PAICART_HOSTS = ['paicart.com', 'www.paicart.com'];
 
-/* Opens the hosted gateway. An in-app browser rather than the system browser
-   so the app stays in the foreground and the deep-link return lands back in
-   this task rather than a fresh one. */
+const parseQuery = (url) => {
+  const params = {};
+  const query = String(url).split('#')[0].split('?')[1] || '';
+  query.split('&').filter(Boolean).forEach((pair) => {
+    const [k, v = ''] = pair.split('=');
+    try {
+      params[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, ' '));
+    } catch {
+      params[k] = v;
+    }
+  });
+  return params;
+};
+
+/* Is this the callback's final redirect back to the site? */
+export const isBkashReturnUrl = (url) => {
+  const m = /^https?:\/\/([^/?#]+)/i.exec(String(url || ''));
+  if (!m || !PAICART_HOSTS.includes(m[1].toLowerCase())) return false;
+  return 'paymentStatus' in parseQuery(url);
+};
+
+/* The callback's paymentStatus is either a keyword or a sentence of its own
+   (see the callback route) — classified exactly as the web's
+   PaymentReturnToast does. */
+export const classifyBkashReturn = (url) => {
+  const { paymentStatus: raw = '', paymentId = '' } = parseQuery(url);
+  if (raw === 'success') return { status: 'success', paymentId };
+  if (raw === 'cancel') return { status: 'cancelled', paymentId };
+  if (raw === 'failure') return { status: 'failed', paymentId };
+  /* Charged, but recording it failed — the team fixes it; not an error for them. */
+  if (raw.startsWith('Payment received')) return { status: 'paid_unrecorded', paymentId, message: raw };
+  return { status: 'error', paymentId, message: raw || 'An error occurred! Please try again later.' };
+};
+
+let pendingCheckout = null;
+
+/* Called by BkashCheckout exactly once per checkout. `closed` means the
+   customer left before bKash redirected back — the payment is only executed
+   on that redirect, so nothing was charged. */
+export const finishBkashCheckout = (result) => {
+  const resolve = pendingCheckout;
+  pendingCheckout = null;
+  resolve?.(result || { status: 'closed' });
+};
+
+/* Starts a checkout and resolves with its outcome:
+   { status: 'success' | 'paid_unrecorded' | 'cancelled' | 'failed' | 'error' | 'closed', paymentId?, message? }
+   Throws only if the checkout could not be started at all. */
 export const openBkashGateway = async (paymentObj) => {
   const { data } = await axios.post(BKASH_CREATE_PAYMENT_URL, {
     ...paymentObj,
     payableTotalWithGatewayCharge: gatewayPayableTotal(paymentObj.amount),
-    url: PAYMENT_RETURN_URL,
+    url: BKASH_RETURN_URL,
   });
-
   const url = data?.bkashURL;
   if (!url) throw new Error('Gateway did not return a payment URL');
+  if (!navigationRef.isReady()) throw new Error('App is not ready');
 
-  if (await InAppBrowser.isAvailable()) {
-    return InAppBrowser.openAuth(url, PAYMENT_RETURN_URL, {
-      ephemeralWebSession: false,
-      showTitle: true,
-      enableUrlBarHiding: true,
-      enableDefaultShare: false,
-    });
+  finishBkashCheckout({ status: 'closed' }); // a stale one, if any
+  return new Promise((resolve) => {
+    pendingCheckout = resolve;
+    navigationRef.navigate('BkashCheckout', { url });
+  });
+};
+
+/* Shows the outcome the way the web does (same messages as its
+   PaymentReturnToast) and says whether the customer has paid. Pass
+   { quietSuccess: true } when the caller shows its own success screen. */
+export const reportBkashResult = (result, { quietSuccess = false } = {}) => {
+  switch (result?.status) {
+    case 'success':
+      if (!quietSuccess) toast.success('Payment successful! Your payment has been recorded.');
+      return true;
+    case 'paid_unrecorded':
+      toast.warning(result.message);
+      return true;
+    case 'failed':
+      toast.error('Payment failed. Please try again.');
+      return false;
+    case 'error':
+      toast.error(result.message);
+      return false;
+    default: // cancelled, closed
+      toast.info('Payment cancelled.');
+      return false;
   }
-  await Linking.openURL(url);
-  return { type: 'external' };
+};
+
+/* paicart://payment-return?paymentStatus=…&paymentId=… → PaymentReturn. */
+export const showPaymentResult = (returnUrl) => {
+  const query = String(returnUrl).split('?')[1] || '';
+  const params = {};
+  query.split('&').filter(Boolean).forEach((pair) => {
+    const [k, v = ''] = pair.split('=');
+    params[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, ' '));
+  });
+  if (navigationRef.isReady()) navigationRef.navigate('PaymentReturn', params);
 };

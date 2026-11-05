@@ -15,9 +15,12 @@ import {
   getDocs,
   deleteDoc,
   getCountFromServer,
+  orderBy,
+  limit,
 } from '@react-native-firebase/firestore';
 import { ref, putFile, getDownloadURL } from '@react-native-firebase/storage';
 import { toast } from './toast';
+import { getString, setString, remove, KEYS } from './storage';
 
 // Helper
 const getCartTotal = (cartItems) => {
@@ -624,56 +627,50 @@ export const getAllHomeCategory = async () => {
   }
 };
 
-export const sendOtp = async (number, otp) => {
-  const otpRef = doc(firestore, 'otpSms', `${number}`);
-  const snapShot = await getDoc(otpRef);
-  try {
-    if (!snapShot.exists()) {
-      await setDoc(otpRef, { number, otp });
-      setTimeout(async () => {
-        await deleteDoc(otpRef);
-      }, 60000);
-    } else {
-      await updateDoc(otpRef, { number, otp });
-      setTimeout(async () => {
-        await deleteDoc(otpRef);
-      }, 60000);
-    }
-  } catch (error) {
-    console.error(error);
-  }
-};
+/* Phone-OTP users sign in to Firebase anonymously and their profile lives at
+   users/{phone number}, so the anonymous session alone doesn't say who they
+   are. The number is kept here (MMKV — the RN stand-in for the web's
+   localStorage), next to the persisted Redux state. Providers' auth listener
+   reads it; signOutEverywhere clears it. */
+export const getPhoneLogin = () => getString(KEYS.PHONE_LOGIN);
+const setPhoneLogin = (number) => setString(KEYS.PHONE_LOGIN, number);
+export const clearPhoneLogin = () => remove(KEYS.PHONE_LOGIN);
 
+/* The OTP doc is written by /api/v1/otp-sms-send (server side — the code is
+   never sent to the app). Throws with a user-facing message on a missing,
+   expired or wrong code, exactly like the web.
+ *
+   The client-side `sendOtp(number, otp)` that used to live here is gone, as
+   it is on the web: the server stores the code itself and no longer returns
+   it, so the old app flow (`res.data.otp` → sendOtp) could never succeed. */
 export const verifyOtp = async (number, otp) => {
   const otpRef = doc(firestore, 'otpSms', `${number}`);
   const snapShot = await getDoc(otpRef);
-  try {
-    if (!snapShot.exists()) {
-      toast.error('Your OTP is expired. Try again.');
-      return null;
-    } else {
-      if (snapShot.data().otp == otp) {
-        const userAuth = {
-          uid: number,
-          id: number,
-          email: '',
-          displayName: number,
-        };
-        const userRef = await createUserProfileDocument(userAuth, { mobileNo: `${number}` });
-        await signInAnonymously(auth);
-        const userObj = await getDoc(userRef);
-        return userObj.data();
-      }
-      /* Wrong code. The web version fell through to an implicit undefined,
-         which the caller read as "no error" — combined with an un-awaited
-         dispatch that is why a bad OTP still let people in. */
-      toast.error('Incorrect OTP. Please try again.');
-      return null;
-    }
-  } catch (error) {
-    console.error(error);
-    return null;
+  const data = snapShot.exists() ? snapShot.data() : null;
+  /* expiresAt is the server's clock; allow for a phone whose clock runs
+     fast. The server deletes the doc at expiry anyway, so this is a backstop. */
+  const CLOCK_SKEW_MS = 2 * 60 * 1000;
+  if (!data || (data.expiresAt && data.expiresAt + CLOCK_SKEW_MS < Date.now())) {
+    throw new Error('Your OTP has expired. Please request a new one.');
   }
+  if (String(data.otp) !== String(otp)) {
+    throw new Error('Invalid OTP.');
+  }
+  /* One use only. */
+  await deleteDoc(otpRef).catch(() => {});
+  const userAuth = {
+    uid: number,
+    id: number,
+    email: '',
+    displayName: number,
+  };
+  const userRef = await createUserProfileDocument(userAuth, { mobileNo: `${number}` });
+  /* Set before signing in: the auth listener reads it to know whose profile
+     an anonymous session belongs to. */
+  setPhoneLogin(number);
+  await signInAnonymously(auth);
+  const userObj = await getDoc(userRef);
+  return userObj.data();
 };
 
 export const getSingleOrderApi = async (id) => {
@@ -881,10 +878,18 @@ export const uploadRefundApply = async (refundObj) => {
        number even though the document id is a string. */
     time: Number(refundId),
   });
-  const orderRef = refundObj.productRequest
-    ? doc(firestore, 'bookingRequest', String(refundObj.order.bookingId))
-    : doc(firestore, 'ordersApi', String(refundObj.order.orderId));
-  await updateDoc(orderRef, { refundStatus: 'requested' });
+  const orderRef = refundObj.shipmentRequest
+    ? doc(firestore, 'shipForMe', String(refundObj.order.bookingId))
+    : refundObj.productRequest
+      ? doc(firestore, 'bookingRequest', String(refundObj.order.bookingId))
+      : doc(firestore, 'ordersApi', String(refundObj.order.orderId));
+  await updateDoc(orderRef, {
+    refundStatus: 'requested',
+    /* Ship For Me cards key their "claim submitted" state off these */
+    ...(refundObj.shipmentRequest
+      ? { refundClaimRequested: true, refundClaimNote: refundObj.reason || '', refundClaimAt: Date.now() }
+      : {}),
+  });
   const orderSnapshot = await getDoc(orderRef);
   return orderSnapshot.data();
 };
@@ -1097,6 +1102,21 @@ export const updateUser = async (user) => {
   }
 };
 
+/* Account deletion request (Google Play requires an in-app path). Flags the
+   user's own profile doc — the same doc updateUser writes, so no new security
+   rule is needed — and the team deletes the account within 30 days, as
+   promised on paicart.com/delete-account. Unlike updateUser this lets errors
+   through, so the UI never reports a request that was not saved. Phone-OTP
+   users' docs are keyed by phone number; currentUser.id covers both. */
+export const requestAccountDeletion = async (user) => {
+  if (!user?.id) throw new Error('Not signed in');
+  await updateDoc(doc(firestore, 'users', user.id), {
+    deletionRequested: true,
+    deletionRequestedAt: new Date().toISOString(),
+    deletionRequestSource: 'app',
+  });
+};
+
 export const getSingleCoupon = async (couponName) => {
   const couponsCollectionRef = collection(firestore, 'coupons');
   const q = query(couponsCollectionRef, where('name', '==', couponName));
@@ -1146,6 +1166,31 @@ const countBucket = async (collectionName, userId, bucket) => {
   }
 };
 
+/* Web getBucketCounts: { [bucket]: count } for every bucket named — one
+   server-side count each (see countBucket). The dashboard overview asks for
+   all of ORDER_BUCKETS / SHIP_BUCKETS, including Refunded and Rejected, which
+   its "No orders yet" check needs. */
+export const getBucketCounts = async (collectionName, userId, buckets) => {
+  const entries = await Promise.all(
+    buckets.map(async (bucket) => [bucket, await countBucket(collectionName, userId, bucket)]),
+  );
+  return Object.fromEntries(entries);
+};
+
+/* Web getLatestOfUser: the user's newest document in a collection, for the
+   overview's "Recent Active" cards — one read instead of the whole history.
+   Needs the composite index (userId ↑, time ↓) the web already uses; while
+   it is missing this throws, and callers fall back to the store's lists. */
+export const getLatestOfUser = async (collectionName, userId) => {
+  const snap = await getDocs(query(
+    collection(firestore, collectionName),
+    where('userId', '==', userId),
+    orderBy('time', 'desc'),
+    limit(1),
+  ));
+  return snap.empty ? null : snap.docs[0].data();
+};
+
 export const getOrderStatCounts = async (userId) => {
   if (!userId) return { toPay: 0, toShip: 0, inShipment: 0, toReceive: 0, delivered: 0 };
   const [toPay, toShip, inShipment, toReceive, delivered] = await Promise.all(
@@ -1162,4 +1207,19 @@ export const getShipStatCounts = async (userId) => {
       .map((b) => countBucket('shipForMe', userId, b)),
   );
   return { pending, approved, inShipment, toReceive, delivered };
+};
+
+/* Writes the whole wishlist for a profile (uid, or the phone number for OTP
+   logins). Neither the web nor the old app ever persisted wishlist changes —
+   they only touched redux, so the Firestore snapshot listener brought removed
+   items back and adds never reached other devices. Same doc and shape the
+   listener in Providers already reads. */
+export const saveWishlistToFirestore = async (profileId, wishlist) => {
+  if (!profileId) return;
+  const wishlistRef = doc(firestore, 'wishlists', String(profileId));
+  await setDoc(
+    wishlistRef,
+    { wishlist: (wishlist || []).map((p) => ({ ...p, price_range: '', videos: '' })) },
+    { merge: true },
+  );
 };

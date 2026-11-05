@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { on, EVENTS } from '@/lib/events';
 import { imageSource } from '@/lib/cdn';
+import { getFlyTarget } from '@/lib/flyToIcon';
 
 const DURATION = 750;
 const SIZE = 64;
@@ -25,6 +26,8 @@ const SIZE = 64;
  * else wired into it.
  */
 function targetFor(target) {
+  const registered = getFlyTarget(target);
+  if (registered) return registered;
   const { width, height } = Dimensions.get('window');
   const TAB_COUNT = 5;
   /* Cart is index 1, Home 2, Orders 3 — wishlist has no tab of its own and

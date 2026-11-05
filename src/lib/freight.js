@@ -74,33 +74,38 @@ export const chargeFor = (categoryRate, mode, weightKg, dg = false) => {
   return isParcelRate(mode, weightKg) ? Math.round(rate) : Math.round(weightKg * rate);
 };
 
-/* Every rate slot for a category, so the calculator can show Air and Sea side
-   by side rather than only the active mode. Bengali labels are what customers
-   see on the web and are kept verbatim. */
+/* Every rate slot for a category, so the rate modal can list each slot of the
+   active mode. Bengali labels are what customers see on the web and are kept
+   verbatim (web product/[id] buildRateTiers). */
 export const buildRateTiers = (categoryRate, mode, weightKg, dg = false) => {
   const dv = (key) => rateField(categoryRate, key, dg) ?? DEFAULT_RATE_PER_KG;
 
   if (mode === 'sea') {
     return [
       { label: '১০০ কেজি পর্যন্ত', sub: '0 – 100 kg', unit: '/kg', rate: dv('100kg'), active: weightKg <= 100 },
-      { label: '১০০০ কেজির নিচে', sub: '100 – 1000 kg', unit: '/kg', rate: dv('below_1000kg'), active: weightKg > 100 && weightKg <= 1000 },
-      { label: '১০০০ কেজির বেশি', sub: '1000 kg +', unit: '/kg', rate: dv('above_1000kg'), active: weightKg > 1000 },
+      { label: '১০০০ কেজি পর্যন্ত', sub: '100 – 1000 kg', unit: '/kg', rate: dv('below_1000kg'), active: weightKg > 100 && weightKg <= 1000 },
+      { label: '১০০০ কেজির বেশি', sub: '1000 kg+', unit: '/kg', rate: dv('above_1000kg'), active: weightKg > 1000 },
     ];
   }
 
   const bulk = hasBulkAirTier(categoryRate, dg);
   return [
-    { label: 'পার্সেল', sub: '0 – 0.3 kg', unit: '/parcel', rate: dv('parcel'), active: weightKg > 0 && weightKg <= AIR_PARCEL_MAX_KG },
+    { label: 'পার্সেল রেট', sub: '0 – 0.3 kg flat', unit: '/parcel', rate: dv('parcel'), active: weightKg <= AIR_PARCEL_MAX_KG },
     { label: '৫ কেজি পর্যন্ত', sub: '0.3 – 5 kg', unit: '/kg', rate: dv('ten'), active: weightKg > AIR_PARCEL_MAX_KG && weightKg <= 5 },
     {
       label: bulk ? '১০০ কেজি পর্যন্ত' : '৫ কেজির বেশি',
-      sub: bulk ? '5 – 100 kg' : '5 kg +',
+      sub: bulk ? '5 – 100 kg' : '5 kg+',
       unit: '/kg',
       rate: dv('eleven'),
       active: weightKg > 5 && (!bulk || weightKg <= 100),
     },
     ...(bulk
-      ? [{ label: '১০০ কেজির বেশি', sub: '100 kg +', unit: '/kg', rate: dv('above_100kg'), active: weightKg > 100 }]
+      ? [{ label: '১০০ কেজির বেশি', sub: '100 kg+', unit: '/kg', rate: dv('above_100kg'), active: weightKg > 100 }]
       : []),
   ];
 };
+
+/* The slot a real order actually lands in is the headline rate: Air's
+   5–100 kg per-kg rate and Sea's 0–100 kg rate. */
+export const mainTierOf = (mode, tiers) =>
+  mode === 'sea' ? tiers[0] : tiers[2] || tiers[tiers.length - 1];

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import ProductImage from '@/components/ui/ProductImage';
 import CopyIdButton from '@/components/CopyIdButton';
+import { addrPhone, addrLine } from '@/lib/address';
 import { StatusBadge, PaymentBadge } from '@/components/ui/StatusBadge';
 
 /* Shared read-only rendering of one order document — the shops/items/skus tree
@@ -53,16 +54,10 @@ export default function OrderSummaryCard({ order, showStatus = true }) {
             Deliver to
           </Text>
           <Text className="text-2xs text-foreground">
-            {order.deliveryAddress.name} · {order.deliveryAddress.phone}
+            {order.deliveryAddress.name} · {addrPhone(order.deliveryAddress)}
           </Text>
           <Text className="text-2xs text-gray-500">
-            {[
-              order.deliveryAddress.address,
-              order.deliveryAddress.area?.name,
-              order.deliveryAddress.district,
-            ]
-              .filter(Boolean)
-              .join(', ')}
+            {addrLine(order.deliveryAddress)}
           </Text>
         </View>
       )}

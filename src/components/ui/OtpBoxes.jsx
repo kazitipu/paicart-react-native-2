@@ -1,68 +1,127 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, TextInput } from 'react-native';
+import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { View, Text, TextInput, Pressable } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 const LENGTH = 6;
+const RED = '#e62222';
+const GRAY50 = '#f9fafb';
+const GRAY200 = '#e5e7eb';
+const BODY = '#1e293b';
 
-/* Six single-character boxes. The web version hand-rolled paste splitting and
-   arrow-key traversal; on a phone the equivalents are the OS autofill of an
-   incoming SMS code and backspace moving to the previous box.
- *
-   `autoComplete="sms-otp"` (Android) and `textContentType="oneTimeCode"` (iOS)
-   are what let the keyboard offer the code straight from the SMS. */
-export default function OtpBoxes({ value = '', onChange, autoFocus = true }) {
-  const refs = useRef([]);
-  const [digits, setDigits] = useState(Array(LENGTH).fill(''));
+/* ═══════════════════════════════════════════════════════════════════════
+   Port of the web login page's <OtpBoxes> (< 640px):
+   `flex gap-2 justify-between`, six `w-12 h-14 text-center text-xl
+   font-extrabold border-2 border-gray-200 focus:border-[#e62222] bg-gray-50
+   focus:bg-white rounded-xl caret-transparent`, the row at opacity-40 while
+   disabled (code expired).
 
-  useEffect(() => {
-    const next = String(value).slice(0, LENGTH).split('');
-    setDigits(Array.from({ length: LENGTH }, (_, i) => next[i] || ''));
-  }, [value]);
+   ⚠️ RN: ONE uncontrolled TextInput (transparent, laid over the boxes)
+   instead of six. Six controlled single-character inputs drop digits when
+   typed fast or when the OS autofill / a paste lands in one box mid-render;
+   a single native field owns the text, so nothing can be lost. The boxes are
+   drawn from its text, and the "focused" box is the next one to fill — which
+   is where the web moves focus after every digit. Paste and SMS autofill
+   (`autoComplete="sms-otp"` / `textContentType="oneTimeCode"`) fill all six
+   at once. To clear (a resend), the parent remounts this with a new `key`.
 
-  const setAt = (i, char) => {
-    /* A pasted or autofilled code arrives in one box — spread it across all
-       six rather than keeping only the first character. */
-    const cleaned = String(char).replace(/\D/g, '');
-    if (cleaned.length > 1) {
-      const spread = cleaned.slice(0, LENGTH).split('');
-      const next = Array.from({ length: LENGTH }, (_, k) => spread[k] || '');
-      setDigits(next);
-      onChange(next.join(''));
-      refs.current[Math.min(spread.length, LENGTH - 1)]?.focus();
-      return;
-    }
-    const next = [...digits];
-    next[i] = cleaned;
-    setDigits(next);
-    onChange(next.join(''));
-    if (cleaned && i < LENGTH - 1) refs.current[i + 1]?.focus();
+   ⚠️ RN: boxes may shrink below 48px (flexShrink) — on the web six 48px
+   inputs + gaps need 328px and overflow the card on 360–390px-wide phones.
+   ═══════════════════════════════════════════════════════════════════════ */
+const OtpBoxes = forwardRef(function OtpBoxes({ onChange, disabled = false, autoFocus = false, onFocus, onBlur }, ref) {
+  const inputRef = useRef(null);
+  const [code, setCode] = useState('');
+  const [focused, setFocused] = useState(false);
+  useImperativeHandle(ref, () => inputRef.current);
+
+  const onText = (t) => {
+    const clean = String(t).replace(/\D/g, '').slice(0, LENGTH);
+    /* A non-digit typed/pasted: strip it from the native field too. */
+    if (clean !== t) inputRef.current?.setNativeProps?.({ text: clean });
+    setCode(clean);
+    onChange?.(clean);
   };
 
-  const onKeyPress = (i, e) => {
-    if (e.nativeEvent.key === 'Backspace' && !digits[i] && i > 0) {
-      refs.current[i - 1]?.focus();
-    }
-  };
+  const active = Math.min(code.length, LENGTH - 1);
 
   return (
-    <View className="flex-row justify-between gap-2">
-      {digits.map((d, i) => (
-        <TextInput
-          key={i}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
-          value={d}
-          onChangeText={(t) => setAt(i, t)}
-          onKeyPress={(e) => onKeyPress(i, e)}
-          keyboardType="number-pad"
-          maxLength={LENGTH}
-          autoFocus={autoFocus && i === 0}
-          autoComplete={i === 0 ? 'sms-otp' : 'off'}
-          textContentType={i === 0 ? 'oneTimeCode' : 'none'}
-          className={`flex-1 h-13 text-center text-lg font-extrabold text-foreground bg-gray-50 border-2 rounded-xl ${d ? 'border-brand' : 'border-gray-200'}`}
-          style={{ height: 52 }}
-        />
-      ))}
+    <View style={{ opacity: disabled ? 0.4 : 1 }}>
+      <Pressable
+        disabled={disabled}
+        onPress={() => inputRef.current?.focus()}
+        style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}
+        accessible={false}
+      >
+        {Array.from({ length: LENGTH }, (_, i) => {
+          const d = code[i] || '';
+          const isFocus = focused && !disabled && i === active;
+          return (
+            <View
+              key={i}
+              style={{
+                width: 48,
+                flexShrink: 1,
+                height: 56,
+                borderWidth: 2,
+                borderRadius: 12,
+                borderColor: isFocus ? RED : GRAY200,
+                backgroundColor: isFocus ? '#ffffff' : GRAY50,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {d ? (
+                <Animated.Text
+                  key={`${i}-${d}`}
+                  entering={FadeIn.duration(120)}
+                  style={{ fontSize: 20, lineHeight: 28, fontWeight: '800', color: BODY }}
+                >
+                  {d}
+                </Animated.Text>
+              ) : (
+                <Text style={{ fontSize: 20, lineHeight: 28 }}> </Text>
+              )}
+            </View>
+          );
+        })}
+      </Pressable>
+
+      <TextInput
+        ref={inputRef}
+        editable={!disabled}
+        onChangeText={onText}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
+        autoFocus={autoFocus}
+        keyboardType="number-pad"
+        inputMode="numeric"
+        maxLength={LENGTH}
+        autoComplete="sms-otp"
+        textContentType="oneTimeCode"
+        importantForAutofill="yes"
+        caretHidden
+        contextMenuHidden={false}
+        selectionColor="transparent"
+        accessibilityLabel="Verification code"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          color: 'transparent',
+          backgroundColor: 'transparent',
+          fontSize: 1,
+          textAlign: 'center',
+        }}
+      />
     </View>
   );
-}
+});
+
+export default OtpBoxes;

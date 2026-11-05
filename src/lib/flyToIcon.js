@@ -28,3 +28,15 @@ export function flyToIconFromRef(imgUrl, ref, target = 'cart') {
     flyToIcon(imgUrl, { x, y, width, height }, target);
   });
 }
+
+/* Landing spots published by whatever is currently showing the cart/wishlist
+   icons (the Home header, like the web's #header-cart-btn). The animation
+   falls back to the tab bar when nothing has registered. The owner must clear
+   its entry when it loses focus, or flights from other screens would land on
+   a header that is no longer visible. */
+const flyTargets = {};
+export const setFlyTarget = (target, point) => {
+  if (point) flyTargets[target] = point;
+  else delete flyTargets[target];
+};
+export const getFlyTarget = (target) => flyTargets[target] || null;

@@ -5,17 +5,15 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import { CheckCircle2, XCircle, Clock } from 'lucide-react-native';
 import Button from '@/components/ui/Button';
-import { getAllOrdersApiRedux, getAllBookingsOfSingleUserRedux } from '@/store/actions';
+import { getAllOrdersApiRedux, getAllBookingsOfSingleUserRedux, getAllShipForMeOfSingleUserRedux } from '@/store/actions';
 import colors from '@/theme/colors';
 
-/* Where the bKash gateway sends the customer back to.
+/* Result screen for a paicart://payment-return deep link.
  *
- * ⚠️ REQUIRES A BACKEND CHANGE. The web passed `window.location.href` as its
- * return URL; there is no such page on mobile, so paicart.com's bkash
- * create-payment and callback must honour `paicart://payment-return`. Until
- * that ships, the payment completes on bKash's side but the app is never
- * returned to — the customer would have to come back manually and the order
- * would show its payment as pending. Tracked as issue #2 in MIGRATION.md.
+ * No longer part of the normal bKash flow: checkout now runs inside the app
+ * (screens/services/BkashCheckout) and reports back to the payment sheet
+ * directly. Kept so an old link, or a server that redirects to the app
+ * scheme, still lands somewhere sensible instead of failing.
  *
  * The gateway is the authority on the result; nothing is written here. The
  * screen only reports what came back and refreshes the lists so the customer
@@ -26,7 +24,7 @@ export default function PaymentReturn() {
   const dispatch = useDispatch();
   const currentUser = useSelector((s) => s.user?.currentUser);
 
-  const params = route.params || {};
+  const params = useMemo(() => route.params || {}, [route.params]);
   const status = useMemo(() => {
     const raw = String(params.status || params.paymentStatus || '').toLowerCase();
     if (raw.includes('success') || raw === 'completed') return 'success';
@@ -41,6 +39,7 @@ export default function PaymentReturn() {
     if (!currentUser?.id) return;
     dispatch(getAllOrdersApiRedux(currentUser.id));
     dispatch(getAllBookingsOfSingleUserRedux(currentUser.id));
+    dispatch(getAllShipForMeOfSingleUserRedux(currentUser.id));
   }, [currentUser?.id, dispatch]);
 
   const view = {

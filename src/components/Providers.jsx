@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Provider, useDispatch } from 'react-redux';
 import store from '@/store';
 import { auth, firestore, onAuthStateChanged, doc, onSnapshot } from '@/lib/firebase';
-import { createUserProfileDocument } from '@/lib/firebaseUtils';
+import { createUserProfileDocument, getPhoneLogin, clearPhoneLogin } from '@/lib/firebaseUtils';
 import {
   setCurrentUser,
   setReduxCart,
@@ -59,9 +59,19 @@ function AuthListener() {
         return;
       }
 
-      /* Returns undefined for anonymous sessions and for accounts that are
-         admins — both are treated as "not a customer" here. */
-      const userRef = await createUserProfileDocument(userAuth);
+      /* Phone-OTP logins are anonymous Firebase sessions whose profile,
+         cart and wishlist are keyed by the phone number (see verifyOtp) —
+         ported from the web listener. Without this the anonymous session was
+         treated as signed out and wiped the user verifyOtp had just set. */
+      const phoneNumber = userAuth.isAnonymous ? getPhoneLogin() : null;
+      if (!userAuth.isAnonymous) clearPhoneLogin();
+      const profileId = phoneNumber || userAuth.uid;
+
+      /* createUserProfileDocument returns undefined for anonymous sessions and
+         for admin accounts — both are treated as "not a customer" here. */
+      const userRef = phoneNumber
+        ? doc(firestore, 'users', phoneNumber)
+        : await createUserProfileDocument(userAuth);
       if (!userRef) {
         signedOut();
         return;
@@ -71,14 +81,14 @@ function AuthListener() {
         dispatch(setCurrentUser({ id: snapShot.id, ...snapShot.data() }));
       });
 
-      const cartRef = doc(firestore, 'carts', userAuth.uid);
+      const cartRef = doc(firestore, 'carts', profileId);
       const unsubscribeCart = onSnapshot(cartRef, (snapShot) => {
         if (snapShot.exists()) {
           dispatch(setReduxCart(snapShot.data().cart));
         }
       });
 
-      const wishlistRef = doc(firestore, 'wishlists', userAuth.uid);
+      const wishlistRef = doc(firestore, 'wishlists', profileId);
       const unsubscribeWishlist = onSnapshot(wishlistRef, (snapShot) => {
         if (snapShot.exists()) {
           dispatch(setReduxWishlist(snapShot.data().wishlist));

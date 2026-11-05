@@ -5,7 +5,9 @@ import { useNavigation } from '@react-navigation/native';
 import { Download, ChevronLeft } from 'lucide-react-native';
 import { Pressable } from 'react-native';
 import Share from 'react-native-share';
-import RNHTMLtoPDF from 'react-native-html-to-pdf';
+/* v1.3 exports generatePDF only — the old default import was undefined, so
+   the PDF button always failed. */
+import { generatePDF } from 'react-native-html-to-pdf';
 import { toast } from '@/lib/toast';
 import EmptyState from '@/components/ui/EmptyState';
 import colors from '@/theme/colors';
@@ -88,7 +90,7 @@ export default function InvoiceShell({
     if (!toHtml || exporting) return;
     setExporting(true);
     try {
-      const { filePath } = await RNHTMLtoPDF.convert({
+      const { filePath } = await generatePDF({
         html: toHtml(),
         fileName: `paicart-${docType || 'invoice'}-${docId}`.replace(/\s+/g, '-').toLowerCase(),
         /* A4 at 72dpi. The web sliced its canvas to the same page size. */

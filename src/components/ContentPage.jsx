@@ -1,102 +1,203 @@
-import React from 'react';
-import { View, Text, Pressable, ScrollView } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { ArrowLeft } from 'lucide-react-native';
-import colors from '@/theme/colors';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useAnimatedRef,
+  useAnimatedReaction,
+  runOnJS,
+} from 'react-native-reanimated';
+import { ArrowUp, List, ChevronRight } from 'lucide-react-native';
+import Header from '@/components/Header';
+import useHideOnScroll from '@/lib/useHideOnScroll';
+import { C, SHADOW, Press, ScalePress, Overlay } from '@/components/product/ui';
+import { TS, TocContext, PAGE_BG } from '@/components/static/StaticBits';
 
-/* An optional bold "Label: " lead-in, as the web pages draw it */
-function LabelledText({ label, text }) {
+/* ═══════════════════════════════════════════════════════════════════════
+   Shell for the static information pages. The web renders each of them
+   under its global Header (hide-on-scroll) with no BottomNav and no pinned
+   bar, then its Footer (not ported, as on Cart). So: an Animated.ScrollView
+   whose content starts below the absolute Header, the white status-bar
+   strip, and — native extras only, layout untouched — a scroll-to-top
+   button and, on the long legal pages (`toc`), a "jump to section" sheet.
+
+   Children are the page itself. Wrap the part that holds SectionCards /
+   Dividers in <ContentPage.Body style={…}> so their offsets can be
+   resolved for the jump sheet.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+const SHOW_FAB_AT = 600;
+
+function Body({ style, children }) {
+  const ctx = React.useContext(TocContext);
   return (
-    <Text className="text-smd text-gray-600 leading-relaxed">
-      {!!label && <Text className="font-bold text-foreground">{label}: </Text>}
-      {text}
-    </Text>
+    <Animated.View
+      entering={FadeIn.duration(250)}
+      onLayout={ctx ? (e) => ctx.registerBody(e.nativeEvent.layout.y) : undefined}
+      style={style}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
-function Bullet({ color, label, text }) {
+function RoundButton({ Icon, onPress, label }) {
   return (
-    <View className="flex-row gap-2.5 py-1">
-      <View className="w-1.5 h-1.5 rounded-full mt-2" style={{ backgroundColor: color }} />
-      <View className="flex-1">
-        <LabelledText label={label} text={text} />
-      </View>
+    <ScalePress
+      onPress={onPress}
+      accessibilityLabel={label}
+      scaleTo={0.9}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: C.gray100,
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: SHADOW.md,
+      }}
+    >
+      <Icon size={18} color={C.gray700} />
+    </ScalePress>
+  );
+}
+
+export default function ContentPage({ bg = PAGE_BG, toc = false, children }) {
+  const insets = useSafeAreaInsets();
+  const scrollRef = useAnimatedRef();
+  const { onScroll, scrollY, isHidden, headerH, setHeaderH, headerStyle } = useHideOnScroll();
+  const topPad = insets.top + headerH;
+
+  /* ── scroll-to-top / TOC buttons appear once the page is scrolled ── */
+  const [showFab, setShowFab] = useState(false);
+  useAnimatedReaction(
+    () => scrollY.value > SHOW_FAB_AT,
+    (v, prev) => {
+      if (v !== prev) runOnJS(setShowFab)(v);
+    },
+  );
+
+  /* ── section registry for the jump sheet ── */
+  const bodyY = useRef(0);
+  const sections = useRef({});
+  const [tocOpen, setTocOpen] = useState(false);
+  const [entries, setEntries] = useState([]);
+  const ctx = useMemo(
+    () =>
+      toc
+        ? {
+            registerBody: (y) => {
+              bodyY.current = y;
+            },
+            registerSection: (label, y) => {
+              sections.current[label] = y;
+            },
+          }
+        : null,
+    [toc],
+  );
+
+  const openToc = () => {
+    setEntries(Object.entries(sections.current).sort((a, b) => a[1] - b[1]));
+    setTocOpen(true);
+  };
+
+  const jumpTo = useCallback(
+    (y) => {
+      setTocOpen(false);
+      /* onLayout y is measured from the content container's origin, so
+         bodyY already includes the paddingTop. */
+      const abs = bodyY.current + y;
+      const goingDown = abs > scrollY.value;
+      /* Scrolling down parks the header off-screen; scrolling up brings it back. */
+      const target = Math.max(0, abs - (goingDown ? insets.top : topPad) - 12);
+      scrollRef.current?.scrollTo({ y: target, animated: true });
+    },
+    [topPad, insets.top, scrollRef, scrollY],
+  );
+
+  const page = (
+    <Animated.ScrollView
+      ref={scrollRef}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      style={{ flex: 1, backgroundColor: bg }}
+      contentContainerStyle={{ paddingTop: topPad, flexGrow: 1 }}
+    >
+      {children}
+    </Animated.ScrollView>
+  );
+
+  return (
+    <View style={{ flex: 1, backgroundColor: bg }}>
+      {ctx ? <TocContext.Provider value={ctx}>{page}</TocContext.Provider> : page}
+
+      {/* chrome: hide-on-scroll Header + white status-bar strip */}
+      <Animated.View
+        pointerEvents={isHidden ? 'none' : 'box-none'}
+        style={[{ position: 'absolute', top: insets.top, left: 0, right: 0, zIndex: 10 }, headerStyle]}
+      >
+        <Header hidden={isHidden} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)} />
+      </Animated.View>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: '#ffffff', zIndex: 11 }} />
+
+      {showFab && (
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(150)}
+          style={{ position: 'absolute', right: 16, bottom: 16, gap: 10, zIndex: 20 }}
+        >
+          {toc && <RoundButton Icon={List} label="Jump to section" onPress={openToc} />}
+          <RoundButton
+            Icon={ArrowUp}
+            label="Scroll to top"
+            onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
+          />
+        </Animated.View>
+      )}
+
+      {toc && (
+        <Overlay visible={tocOpen} onClose={() => setTocOpen(false)}>
+          <View
+            style={{
+              backgroundColor: '#ffffff',
+              borderTopLeftRadius: 16,
+              borderTopRightRadius: 16,
+              paddingTop: 16,
+              paddingBottom: 16 + insets.bottom,
+              maxHeight: 520,
+            }}
+          >
+            <Text style={[TS.sm, { fontWeight: '700', color: C.gray800, paddingHorizontal: 20, marginBottom: 8 }]}>
+              Jump to section
+            </Text>
+            <ScrollView>
+              {entries.map(([label, y]) => (
+                <Press
+                  key={label}
+                  onPress={() => jumpTo(y)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    paddingHorizontal: 20,
+                    paddingVertical: 12,
+                    backgroundColor: pressed ? C.gray50 : '#ffffff',
+                  })}
+                >
+                  <Text style={[TS.sm, { color: C.gray700, flex: 1 }]}>{label}</Text>
+                  <ChevronRight size={14} color={C.gray400} />
+                </Press>
+              ))}
+            </ScrollView>
+          </View>
+        </Overlay>
+      )}
     </View>
   );
 }
 
-/* Renders one of the extracted legal documents. The web drew each of these as
-   a bespoke page; they only ever differed in their content, so there is one
-   renderer and the copy lives in data/legalContent.js. */
-export default function ContentPage({ doc, children }) {
-  const navigation = useNavigation();
-
-  return (
-    <SafeAreaView edges={['top']} className="flex-1 bg-background">
-      <View className="flex-row items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-100">
-        {navigation.canGoBack() && (
-          <Pressable onPress={() => navigation.goBack()} hitSlop={8} className="p-1">
-            <ArrowLeft size={22} color={colors.foreground} />
-          </Pressable>
-        )}
-        <View className="flex-1">
-          <Text className="text-md font-bold text-foreground">{doc?.title}</Text>
-          {!!doc?.subtitle && <Text className="text-2xs text-gray-400">{doc.subtitle}</Text>}
-        </View>
-      </View>
-
-      <ScrollView contentContainerClassName="p-3 pb-10">
-        {children}
-
-        {!!doc?.intro && (
-          <View className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-3">
-            <Text className="text-smd text-amber-800 leading-relaxed">{doc.intro}</Text>
-          </View>
-        )}
-
-        {(doc?.sections || []).map((section, i) => (
-          <View
-            key={`${section.title}-${i}`}
-            className="bg-white rounded-2xl border border-gray-100 mb-3 overflow-hidden"
-          >
-            <View className="h-0.5" style={{ backgroundColor: section.color }} />
-            <View className="px-4 py-3 border-b border-gray-50">
-              <Text className="text-smd font-bold text-foreground">{section.title}</Text>
-            </View>
-            <View className="px-4 py-3">
-              {section.body.map((b, n) =>
-                b.type === 'item' ? (
-                  <View key={n} className="flex-row gap-2.5 py-1.5">
-                    {!!b.n && (
-                      <View
-                        className="w-6 h-6 rounded-full items-center justify-center"
-                        style={{ backgroundColor: `${section.color}18` }}
-                      >
-                        <Text className="text-2xs font-bold" style={{ color: section.color }}>
-                          {b.n}
-                        </Text>
-                      </View>
-                    )}
-                    <View className="flex-1">
-                      <LabelledText label={b.label} text={b.text} />
-                      {(b.sub || []).map((s, k) => (
-                        <Bullet key={k} color={section.color} label={s.label} text={s.text} />
-                      ))}
-                    </View>
-                  </View>
-                ) : b.type === 'bullet' ? (
-                  <Bullet key={n} color={section.color} label={b.label} text={b.text} />
-                ) : (
-                  <Text key={n} className="text-smd text-gray-600 leading-relaxed py-1">
-                    {b.text}
-                  </Text>
-                ),
-              )}
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
+ContentPage.Body = Body;

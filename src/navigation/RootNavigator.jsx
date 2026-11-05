@@ -1,30 +1,11 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ROUTES, ROOT_SCREENS, screensForTab, TABS } from './routes';
+import { ROUTES, ROOT_SCREENS } from './routes';
 import { SCREENS } from './screenRegistry';
 import TabNavigator from './TabNavigator';
+import BkashCheckout from '@/screens/services/BkashCheckout';
 
 const RootStack = createNativeStackNavigator();
-
-/* Builds one native stack per tab from the route registry, so adding a screen
-   is a one-line change in routes.js + screenRegistry.js rather than edits
-   scattered across five navigator files. */
-export function makeTabStack(tab, initialRouteName) {
-  const Stack = createNativeStackNavigator();
-  const names = screensForTab(tab);
-  return function TabStack() {
-    return (
-      <Stack.Navigator
-        initialRouteName={initialRouteName}
-        screenOptions={{ headerShown: false }}
-      >
-        {names.map((name) => (
-          <Stack.Screen key={name} name={name} component={SCREENS[name]} />
-        ))}
-      </Stack.Navigator>
-    );
-  };
-}
 
 export default function RootNavigator() {
   return (
@@ -42,6 +23,13 @@ export default function RootNavigator() {
           }}
         />
       ))}
+      {/* In-app bKash checkout. Deliberately not in ROUTES: no deep link may
+          open a payment page — only lib/payments.openBkashGateway does. */}
+      <RootStack.Screen
+        name="BkashCheckout"
+        component={BkashCheckout}
+        options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom', gestureEnabled: false }}
+      />
     </RootStack.Navigator>
   );
 }

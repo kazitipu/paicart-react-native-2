@@ -63,6 +63,9 @@ export const KEYS = {
   STATE: 'paicart_state',
   BANNERS: 'paicart_banners_v1',
   IMAGE_SEARCH_INSTANCES: 'imageSearchInstances',
+  /* Phone-OTP login: the number whose users/{number} profile the anonymous
+     Firebase session belongs to. Same key as the web's localStorage entry. */
+  PHONE_LOGIN: 'paicart_phone_login',
   /* Buy-Now intent captured before a login redirect. sessionStorage on web,
      keyed per product: `paicart_pending_${id}`. */
   pendingProduct: (id) => `paicart_pending_${id}`,

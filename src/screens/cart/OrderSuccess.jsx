@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { CheckCircle2 } from 'lucide-react-native';
 import Button from '@/components/ui/Button';
 import colors from '@/theme/colors';
+import { goHome } from '@/navigation/goHome';
 
 export default function OrderSuccess() {
   const navigation = useNavigation();
@@ -20,7 +21,7 @@ export default function OrderSuccess() {
         className="mt-6 self-stretch"
         onPress={() => navigation.navigate('OrdersTab', { screen: 'BuyShipMyOrders' })}
       />
-      <Pressable onPress={() => navigation.navigate('HomeTab', { screen: 'Home' })} className="py-3">
+      <Pressable onPress={goHome} className="py-3">
         <Text className="text-smd text-gray-500 font-semibold">Continue shopping</Text>
       </Pressable>
     </SafeAreaView>

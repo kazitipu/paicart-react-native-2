@@ -60,9 +60,18 @@ export default function Notices() {
             </View>
             <View className="flex-1">
               <Text className="text-smd font-semibold text-foreground" numberOfLines={2}>
-                {item.title || item.subject}
+                {item.noticeTitle || item.title || item.subject || 'Notice'}
               </Text>
-              {!!item.date && <Text className="text-xxs text-gray-400 mt-0.5">{item.date}</Text>}
+              {!!(item.noticeBody || item.body || item.description) && (
+                <Text className="text-xxs text-gray-500 mt-0.5" numberOfLines={2}>
+                  {item.noticeBody || item.body || item.description}
+                </Text>
+              )}
+              {!!(item.time || item.date) && (
+                <Text className="text-xxs text-gray-400 mt-0.5">
+                  {item.time ? new Date(item.time).toLocaleDateString() : item.date}
+                </Text>
+              )}
             </View>
             <ChevronRight size={16} color="#d1d5db" />
           </Pressable>

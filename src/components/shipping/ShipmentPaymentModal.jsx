@@ -1,173 +1,212 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text } from 'react-native';
 import { useDispatch } from 'react-redux';
-import Sheet from '@/components/ui/Sheet';
-import Button from '@/components/ui/Button';
+import { Check } from 'lucide-react-native';
+import { C, Spinner } from '@/components/product/ui';
+import { TS } from '@/components/cart/CartBits';
+import { openBkashGateway, reportBkashResult } from '@/lib/payments';
+import { uploadShipmentPaymentRequestRedux } from '@/store/actions';
+import { toast } from '@/lib/toast';
+import {
+  PaymentSheet, SheetBody, SheetFooter, GhostButton, SolidButton, MethodTabs, TabPane,
+  DepositBanner, BanknoteTile, AMBER_BOX, CARD_LABEL, PAY, TAB_SHADOW_SHIP,
+} from '@/components/payments/PaymentSheet';
 import BankPicker from '@/components/payments/BankPicker';
 import ManualBkashTotal from '@/components/payments/ManualBkashTotal';
-import ScreenshotUpload from '@/components/payments/ScreenshotUpload';
-import { toast } from '@/lib/toast';
-import { gatewayBkashFee, openBkashGateway, GATEWAY_BKASH_FEE_PCT } from '@/lib/payments';
-import { getTotal } from '@/lib/shipForMe';
-import { uploadShipmentPaymentRequestRedux } from '@/store/actions';
-import colors from '@/theme/colors';
+import BkashPanel from '@/components/payments/BkashPanel';
+import ScreenshotUpload, { useScreenshotUpload } from '@/components/payments/ScreenshotUpload';
 
-/* Settles the freight invoice on one or more ship-for-me bookings. */
-export default function ShipmentPaymentModal({
-  visible, bookings = [], currentUser, onClose, onSuccess,
-}) {
+/* ═══════════════════════════════════════════════════════════════════════
+   Port of the web's PaymentModal (app/pages/dashboard/ship-for-me/
+   my-request/_shared.jsx) at its mobile breakpoint. Settles the freight
+   invoice on one Ship For Me booking or several at once (combined).
+
+     header   Make Payment · "Booking: id" / "Combined Payment · N bookings"
+     card     "Total Payable" — the sum of shippingChargeCustomer (30px),
+              "{receivedWeight} kg × ৳{customerRate}/kg" for a single
+              booking, the 56px yellow Banknote tile. Fixed amount — there is
+              no amount input and no partial payment here.
+     tabs     #00857A (darker than the other sheets' #00B8A9)
+              Mobile Banking (bKash gateway, 1.5%, first row "Total") /
+              Direct Deposit (bank list + manual bKash 2% total,
+              screenshot, Cancel / Submit)
+
+   Native differences, deliberate: a ref guard against a double submit; bKash
+   runs in the in-app BkashCheckout screen (lib/payments).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+export default function ShipmentPaymentModal({ visible, bookings = [], currentUser, onClose, onSuccess }) {
   const dispatch = useDispatch();
   const [tab, setTab] = useState('bkash');
-  const [method, setMethod] = useState('City');
-  const [imageUrl, setImageUrl] = useState('');
+  const [method, setMethod] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const shot = useScreenshotUpload();
+  const { imageUrl, imgLoading } = shot;
+  const resetShot = useRef(shot.reset);
+  resetShot.current = shot.reset;
+  const busyRef = useRef(false);
 
-  const totalDue = useMemo(
-    () =>
-      bookings.reduce((a, b) => {
-        const bill =
-          (parseInt(b.shippingChargeCustomer, 10) || 0) +
-          (parseInt(b.otherCost, 10) || 0) -
-          (parseInt(b.discount, 10) || 0);
-        return a + Math.max(0, bill - getTotal(b));
-      }, 0),
-    [bookings],
-  );
+  const isCombined = bookings.length > 1;
+  const total = bookings.reduce((a, b) => a + (parseInt(b.shippingChargeCustomer) || 0), 0);
+  const single = bookings[0];
 
-  const bkashFee = gatewayBkashFee(totalDue);
-  const bkashTotal = parseFloat((totalDue + bkashFee).toFixed(2));
+  /* Fresh state each time it opens — the web mounted a new instance. */
+  useEffect(() => {
+    if (!visible) return;
+    setTab('bkash');
+    setMethod('');
+    setSubmitting(false);
+    busyRef.current = false;
+    resetShot.current();
+  }, [visible]);
 
-  const buildPaymentObj = (overrides = {}) => ({
-    status: 'pending',
-    paymentId: Math.floor(Math.random() * Date.now()),
-    date: new Date().toLocaleDateString('en-GB'),
-    amount: totalDue,
-    payableTotal: totalDue,
-    imageUrl: imageUrl || '',
-    method,
-    productRequestArray: bookings,
-    userId: currentUser?.id,
-    displayName: currentUser?.displayName,
-    time: Date.now(),
-    ...overrides,
-  });
+  const buildPaymentObj = (overrides = {}) => {
+    const date = new Date();
+    return {
+      status: 'pending',
+      paymentId: Math.floor(Math.random() * Date.now()),
+      date: date.toLocaleDateString('en-GB'),
+      amount: total,
+      imageUrl: imageUrl || '',
+      method,
+      productRequestArray: bookings,
+      userId: currentUser?.id,
+      displayName: currentUser?.displayName,
+      time: date.getTime(),
+      ...overrides,
+    };
+  };
 
-  const submitDirect = async () => {
-    if (totalDue <= 0) {
-      toast.error('Nothing due on this shipment.');
+  const handleDirectSubmit = async () => {
+    if (busyRef.current) return;
+    if (imgLoading) {
+      toast.error('Please wait for the image to finish uploading.');
       return;
     }
     if (!imageUrl) {
       toast.error('Please upload your transaction screenshot.');
       return;
     }
+    if (!method) {
+      toast.error('Please choose a payment method.');
+      return;
+    }
+    busyRef.current = true;
     setSubmitting(true);
     try {
       await dispatch(uploadShipmentPaymentRequestRedux(buildPaymentObj()));
-      toast.success('Payment request submitted! Our team will confirm it soon.');
       onSuccess?.();
+      toast.success('Payment request submitted! Our team will confirm it soon.');
+      setSubmitting(false);
+      busyRef.current = false;
+      onClose?.();
+      return;
     } catch {
       toast.error('Submission failed. Please try again.');
     }
+    busyRef.current = false;
     setSubmitting(false);
   };
 
-  const submitBkash = async () => {
-    if (totalDue <= 0) return;
+  const handleBkashPayment = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setSubmitting(true);
     try {
-      await openBkashGateway({ ...buildPaymentObj({ method: 'Bkash' }), payerPhone: currentUser?.mobileNo || '', shipmentRequest: true });
-      onClose?.();
+      /* The web sent payableTotal: total and
+         payableTotalWithGatewayCharge: parseInt(parseInt(total × 1.5%) +
+         parseInt(total)) — lib/payments computes the same figure from
+         `amount` (total is already an integer) and adds the in-app
+         return url. */
+      const result = await openBkashGateway({
+        ...buildPaymentObj({ method: 'Bkash' }),
+        payableTotal: total,
+        payerPhone: currentUser?.mobileNo || '',
+        shipForMe: true,
+      });
+
+      /* Checkout ran inside the app (BkashCheckout). Paid → refresh and close,
+         like a submitted manual payment; otherwise say why and keep this sheet
+         open so they can retry or pick another method. */
+      const paid = reportBkashResult(result);
+      setSubmitting(false);
+      busyRef.current = false;
+      if (paid) {
+        onSuccess?.();
+        onClose?.();
+      }
+      return;
     } catch {
       toast.error('An error occurred! Please try again later.');
     }
+    busyRef.current = false;
     setSubmitting(false);
   };
 
   return (
-    <Sheet
+    <PaymentSheet
       visible={visible}
       onClose={onClose}
-      title={bookings.length > 1 ? `Combined Payment · ${bookings.length}` : 'Pay shipping'}
-      headerColor={colors.primary}
-      footer={
-        <Button
-          title={tab === 'direct' ? 'Submit Payment' : `Pay ৳${bkashTotal.toLocaleString()} with bKash`}
-          loading={submitting}
-          onPress={tab === 'direct' ? submitDirect : submitBkash}
-          className={tab === 'bkash' ? 'bg-bkash' : ''}
-        />
-      }
+      zIndex={50}
+      title="Make Payment"
+      subtitle={isCombined ? `Combined Payment · ${bookings.length} bookings` : `Booking: ${single?.bookingId ?? ''}`}
     >
-      <View
-        className="rounded-2xl px-4 py-3 mb-4 border"
-        style={{ backgroundColor: colors.amberSoft, borderColor: colors.amberLine }}
-      >
-        <View className="flex-row items-center justify-between">
-          <Text className="text-3xs text-amber-900">Total Due</Text>
-          <Text className="text-md font-extrabold text-amber-900">
-            ৳{totalDue.toLocaleString()}
-          </Text>
-        </View>
-      </View>
-
-      <View className="flex-row gap-2 mb-4">
-        {[
-          { key: 'bkash', label: 'Mobile Banking' },
-          { key: 'direct', label: 'Direct Deposit' },
-        ].map((t) => {
-          const active = tab === t.key;
-          return (
-            <Pressable
-              key={t.key}
-              onPress={() => setTab(t.key)}
-              className="flex-1 rounded-xl py-2.5 items-center"
-              style={
-                active
-                  ? { backgroundColor: t.key === 'bkash' ? colors.bkash : colors.teal }
-                  : { backgroundColor: '#f1f5f9' }
-              }
-            >
-              <Text className={`text-tiny font-bold ${active ? 'text-white' : 'text-gray-500'}`}>
-                {t.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {tab === 'direct' ? (
-        <>
-          <BankPicker value={method} onChange={setMethod} />
-          <ManualBkashTotal method={method} amount={totalDue} />
-          <View className="mt-4">
-            <ScreenshotUpload value={imageUrl} onChange={setImageUrl} />
-          </View>
-        </>
-      ) : (
+      {/* Amount card */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 }}>
         <View
-          className="rounded-2xl border px-4 py-3"
-          style={{ backgroundColor: '#fdf2f8', borderColor: '#fbcfe8' }}
+          style={[{ borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, AMBER_BOX]}
         >
-          {[
-            { label: 'Amount', value: `${totalDue.toLocaleString()} Tk` },
-            { label: `Fee (${GATEWAY_BKASH_FEE_PCT}%)`, value: `${bkashFee} Tk`, muted: true },
-            { label: 'Total', value: `${bkashTotal.toLocaleString()} Tk`, bold: true },
-          ].map((r) => (
-            <View key={r.label} className="flex-row items-center justify-between py-0.5">
-              <Text className={`text-3xs ${r.muted ? 'text-gray-500' : 'text-gray-700'}`}>
-                {r.label}
+          <View style={{ flexShrink: 1 }}>
+            <Text style={CARD_LABEL}>Total Payable</Text>
+            {/* text-3xl font-extrabold leading-tight; "Tk" text-base ml-1 */}
+            <Text style={{ fontSize: 30, lineHeight: 37.5, fontWeight: '800', color: C.gray800 }}>
+              {total}
+              <Text style={{ fontSize: 16, fontWeight: '700', color: C.gray500 }}> Tk</Text>
+            </Text>
+            {!isCombined && single?.receivedWeight && single?.customerRate ? (
+              <Text style={[TS.xs, { color: C.gray400, marginTop: 2 }]}>
+                {single.receivedWeight} kg × ৳{single.customerRate}/kg
               </Text>
-              <Text
-                className={`text-3xs ${r.bold ? 'font-extrabold' : 'font-semibold'}`}
-                style={r.bold ? { color: colors.bkash } : undefined}
-              >
-                {r.value}
-              </Text>
-            </View>
-          ))}
+            ) : null}
+          </View>
+          <BanknoteTile size={56} icon={26} shadow="0 4px 14px rgba(245,158,11,0.333)" />
         </View>
+      </View>
+
+      <MethodTabs tab={tab} onChange={setTab} color={PAY.TEAL_SHIP} shadow={TAB_SHADOW_SHIP} />
+
+      <SheetBody>
+        {tab === 'direct' ? (
+          <TabPane id="direct">
+            <DepositBanner color={PAY.TEAL_SHIP} />
+            <BankPicker method={method} onSelect={setMethod}>
+              <ManualBkashTotal method={method} amount={total} style={{ marginTop: 0 }} />
+            </BankPicker>
+            <ScreenshotUpload imageUrl={imageUrl} loading={imgLoading} onPick={shot.pick} />
+          </TabPane>
+        ) : (
+          <TabPane id="bkash">
+            <BkashPanel
+              method={method}
+              onSelect={setMethod}
+              payable={total}
+              amountLabel="Total"
+              onPay={handleBkashPayment}
+              submitting={submitting}
+            />
+          </TabPane>
+        )}
+      </SheetBody>
+
+      {tab === 'direct' && (
+        <SheetFooter>
+          <GhostButton title="Cancel" onPress={onClose} />
+          <SolidButton onPress={handleDirectSubmit} disabled={submitting || imgLoading}>
+            {submitting ? <Spinner size={14} /> : <Check size={14} color="#ffffff" />}
+            <Text style={[TS.sm, { fontWeight: '700', color: '#ffffff' }]}>{submitting ? 'Submitting…' : 'Submit Payment'}</Text>
+          </SolidButton>
+        </SheetFooter>
       )}
-    </Sheet>
+    </PaymentSheet>
   );
 }
