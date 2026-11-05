@@ -1,5 +1,5 @@
 import { makeMutable, withSequence, withTiming, Easing } from 'react-native-reanimated';
-import { isScrollingNow } from '@/lib/scrollActivity';
+import { scrolledWithin } from '@/lib/scrollActivity';
 
 /* ─── One clock for every decorative animation ───
  * The header shimmer, search sparkle, WhatsApp ring, Home-tab halo, Home's
@@ -13,7 +13,10 @@ import { isScrollingNow } from '@/lib/scrollActivity';
  * so between plays nothing changes and nothing redraws. The restart is a
  * plain JS timer, so during the rest no animation is running at all.
  *
- * decorPhase() also reads as resting (1) while a list is being scrolled. */
+ * A play is skipped if a list was scrolled within the last second, so nothing
+ * animates while scrolling. (The styles themselves never read the scroll
+ * state: anything they read re-runs them, and the scroll stamp changes on
+ * every scroll event.) */
 const PLAY_MS = 2200;
 const REST_MS = 6000;
 
@@ -21,6 +24,7 @@ const clock = makeMutable(1);
 let timer = null;
 
 const play = () => {
+  if (scrolledWithin(1000)) return; // try again next cycle
   clock.value = withSequence(
     withTiming(0, { duration: 0 }),
     withTiming(1, { duration: PLAY_MS, easing: Easing.linear }),
@@ -40,10 +44,10 @@ export function stopDecorClock() {
   clock.value = 1;
 }
 
-/* 0 → 1 during a play, 1 at rest or while scrolling. Worklet. */
+/* 0 → 1 during a play, 1 at rest. Worklet. */
 export function decorPhase() {
   'worklet';
-  return isScrollingNow() ? 1 : clock.value;
+  return clock.value;
 }
 
 /* 0 → 1 → 0 once per play (pulses, floats). Worklet. */

@@ -18,3 +18,10 @@ export function isScrollingNow() {
   'worklet';
   return Date.now() - lastScrollAt.value < QUIET_MS;
 }
+
+/* JS-thread check, for schedulers (lib/decorClock) — deliberately not read
+   inside animated styles: a style that reads lastScrollAt re-runs on every
+   scroll event, which on Home was ~15 styles per frame for no visible change. */
+export function scrolledWithin(ms) {
+  return Date.now() - lastScrollAt.value < ms;
+}

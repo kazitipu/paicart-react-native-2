@@ -744,76 +744,27 @@ export default function Home() {
   const getRowType = useCallback((item) => item.type, []);
 
   /* "active" = visible (already filtered server-side) AND not past expiry */
-  const activeCampaigns = campaigns.filter(
-    (c) => !c.expiryDate || new Date(c.expiryDate).getTime() > Date.now(),
+  const activeCampaigns = useMemo(
+    () => campaigns.filter((c) => !c.expiryDate || new Date(c.expiryDate).getTime() > Date.now()),
+    [campaigns],
   );
 
   /* "Ship for me" promotional banners live in the services section instead. */
-  const filteredBanners = banners.filter((b) => {
+  const filteredBanners = useMemo(
+    () =>
+      banners.filter((b) => {
     const text = [b.title, b.name, b.category, b.type, b.tag, b.description]
       .filter(Boolean).join(' ').toLowerCase();
     return !text.includes('ship for me') && !text.includes('ship-for-me');
-  });
+  }),
+    [banners],
+  );
 
-  /* ── Hide-on-scroll header (web Header: show near the top, hide on a >5px
-        downward move, show again on a >5px upward move; 300ms ease-out). ── */
-  const scrollRef = useAnimatedRef();
-  useScrollToTop(scrollRef);
-  const [headerH, setHeaderH] = useState(118);
-  const [headerHidden, setHeaderHidden] = useState(false);
-  const hidden = useSharedValue(0);
-  const lastY = useSharedValue(0);
-  const headerHV = useSharedValue(118);
-
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      markScrolling();
-      const y = e.contentOffset.y;
-      const delta = y - lastY.value;
-      let next = hidden.value;
-      if (y < 80) next = 0;
-      else if (delta > 5) next = 1;
-      else if (delta < -5) next = 0;
-      if (next !== hidden.value) {
-        hidden.value = next;
-        runOnJS(setHeaderHidden)(next === 1);
-      }
-      lastY.value = y;
-    },
-  });
-
-  const headerStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        translateY: withTiming(hidden.value ? -headerHV.value : 0, {
-          duration: 300,
-          easing: Easing.out(Easing.ease),
-        }),
-      },
-    ],
-  }));
-
-  return (
-    <View className="flex-1" style={{ backgroundColor: '#f5f5f5' }}>
-      <AnimatedFlashList
-        ref={scrollRef}
-        data={rows}
-        keyExtractor={(r) => r.key}
-        renderItem={renderRow}
-        getItemType={getRowType}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ paddingTop: insets.top + headerH, paddingBottom: 68 /* clears the WhatsApp button */ }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[ORANGE]}
-            tintColor={ORANGE}
-            progressViewOffset={insets.top + headerH}
-          />
-        }
-        ListHeaderComponent={
+  /* Memoised: Home re-renders whenever the top bar hides or shows, and an
+     inline header rebuilt the banner, categories, campaigns and services —
+     the biggest subtree on the page — on every toggle mid-scroll. */
+  const listHeader = useMemo(
+    () => (
           <View style={{ paddingHorizontal: PAGE_PX, paddingTop: 16, paddingBottom: 24, gap: 24 }}>
             {/* ① Banner */}
             <BannerSlider banners={filteredBanners} />
@@ -862,7 +813,73 @@ export default function Home() {
         </View>
 
           </View>
+    ),
+    [filteredBanners, activeCampaigns],
+  );
+
+  /* ── Hide-on-scroll header (web Header: show near the top, hide on a >5px
+        downward move, show again on a >5px upward move; 300ms ease-out). ── */
+  const scrollRef = useAnimatedRef();
+  useScrollToTop(scrollRef);
+  const [headerH, setHeaderH] = useState(118);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const hidden = useSharedValue(0);
+  const lastY = useSharedValue(0);
+  const headerHV = useSharedValue(118);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      markScrolling();
+      const y = e.contentOffset.y;
+      const delta = y - lastY.value;
+      let next = hidden.value;
+      if (y < 80) next = 0;
+      else if (delta > 5) next = 1;
+      else if (delta < -5) next = 0;
+      if (next !== hidden.value) {
+        hidden.value = next;
+        runOnJS(setHeaderHidden)(next === 1);
+      }
+      lastY.value = y;
+    },
+  });
+
+  const headerStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: withTiming(hidden.value ? -headerHV.value : 0, {
+          duration: 300,
+          easing: Easing.out(Easing.ease),
+        }),
+      },
+    ],
+  }));
+
+  return (
+    <View className="flex-1" style={{ backgroundColor: '#f5f5f5' }}>
+      <AnimatedFlashList
+        ref={scrollRef}
+        data={rows}
+        keyExtractor={(r) => r.key}
+        renderItem={renderRow}
+        getItemType={getRowType}
+        /* Detach off-screen views (the big header, rows above/below) on
+           Android: measured on a Redmi 15, RenderThread spent half the app's
+           CPU walking and drawing the whole attached tree every frame. */
+        removeClippedSubviews
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ paddingTop: insets.top + headerH, paddingBottom: 68 /* clears the WhatsApp button */ }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[ORANGE]}
+            tintColor={ORANGE}
+            progressViewOffset={insets.top + headerH}
+          />
         }
+        ListHeaderComponent={listHeader}
         ListFooterComponent={
           <View style={{ paddingHorizontal: PAGE_PX, paddingTop: 24, paddingBottom: 16, gap: 24 }}>
             {/* ⑥ Trust bar */}

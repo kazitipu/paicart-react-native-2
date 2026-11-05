@@ -93,15 +93,32 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        /* Play upload key. The keystore (android/app/paicart-upload.keystore)
+           is git-ignored and its passwords live in ~/.gradle/gradle.properties
+           (PAICART_UPLOAD_*), never in the repo. Google re-signs the app with
+           its own app-signing key (Play App Signing). */
+        if (project.hasProperty('PAICART_UPLOAD_STORE_FILE')) {
+            release {
+                storeFile file(PAICART_UPLOAD_STORE_FILE)
+                storePassword PAICART_UPLOAD_STORE_PASSWORD
+                keyAlias PAICART_UPLOAD_KEY_ALIAS
+                keyPassword PAICART_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            if (project.hasProperty('PAICART_UPLOAD_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            } else {
+                /* Machine without the upload key: still builds for local
+                   testing, but Play will reject this signature. */
+                logger.warn('PAICART_UPLOAD_* not set — release is DEBUG-signed and cannot be uploaded to Play.')
+                signingConfig signingConfigs.debug
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }

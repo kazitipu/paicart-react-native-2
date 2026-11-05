@@ -414,7 +414,24 @@ export default function Collection() {
   };
 
   /* ── List pieces ── */
-  const listData = loading ? Array.from({ length: 20 }, (_, i) => ({ __skeleton: i })) : notFound ? [] : products;
+  /* Skeletons are NOT list items: FlashList's two-column layout left every
+     right-hand placeholder blank while loading. While loading the list has no
+     data and its empty slot shows this plain grid instead. */
+  const listData = loading || notFound ? [] : products;
+  const skeletonGrid = (
+    <View style={{ paddingHorizontal: GAP / 2, gap: GAP }}>
+      {Array.from({ length: 5 }, (_, r) => (
+        <View key={r} className="flex-row" style={{ gap: GAP }}>
+          <View style={{ width: CARD_W }}>
+            <CollectionProductCardSkeleton />
+          </View>
+          <View style={{ width: CARD_W }}>
+            <CollectionProductCardSkeleton />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
 
   /* FlashList has no columnWrapperStyle or gap: each cell carries half the
      gutter on either side (the container's padding is reduced to match) and
@@ -423,20 +440,13 @@ export default function Collection() {
   const renderItem = useCallback(
     ({ item }) => (
       <View style={{ paddingHorizontal: GAP / 2, paddingBottom: GAP }}>
-        {item.__skeleton !== undefined ? (
-          <View style={{ width: CARD_W }}>
-            <CollectionProductCardSkeleton />
-          </View>
-        ) : (
-          <View style={{ width: CARD_W }}>
-            <CollectionProductCard product={item} taka={taka} campaignRate={campaignRate} onOpen={openProduct} />
-          </View>
-        )}
+        <View style={{ width: CARD_W }}>
+          <CollectionProductCard product={item} taka={taka} campaignRate={campaignRate} onOpen={openProduct} />
+        </View>
       </View>
     ),
     [taka, campaignRate, openProduct],
   );
-  const getItemType = useCallback((item) => (item.__skeleton !== undefined ? 'skeleton' : 'product'), []);
 
   const listHeader = (
     <View>
@@ -499,14 +509,15 @@ export default function Collection() {
       <AnimatedFlashList
         ref={listRef}
         data={listData}
-        keyExtractor={(item, i) => (item.__skeleton !== undefined ? `sk-${i}` : item.id != null ? String(item.id) : `p-${i}`)}
+        keyExtractor={(item, i) => (item.id != null ? String(item.id) : `p-${i}`)}
         numColumns={2}
         renderItem={renderItem}
-        getItemType={getItemType}
+        /* Detach off-screen cards on Android (see Home). */
+        removeClippedSubviews
         contentContainerStyle={{ paddingTop: insets.top + headerH, paddingBottom: 24 - GAP, paddingHorizontal: PAGE_PX - GAP / 2 }}
         ListHeaderComponent={listHeader}
         ListFooterComponent={listFooter}
-        ListEmptyComponent={listEmpty}
+        ListEmptyComponent={loading ? skeletonGrid : listEmpty}
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
         onScroll={onScroll}
