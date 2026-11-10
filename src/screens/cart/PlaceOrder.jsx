@@ -664,20 +664,26 @@ export default function PlaceOrder() {
 
       await dispatch(addToOrdersApiRedux(currentUser, orders));
 
-      if (coupon && currentUser) {
-        const usedCoupons = currentUser.usedCoupons || [];
-        const existing = usedCoupons.find((c) => c.id === coupon.id);
-        const updated = existing
-          ? usedCoupons.map((c) => (c.id === coupon.id ? { ...c, used: parseInt(c.used, 10) + 1 } : c))
-          : [...usedCoupons, { ...coupon, used: 1 }];
-        await updateUser({ ...currentUser, usedCoupons: updated });
-      }
-
-      /* Remove only what was ordered — the cart may hold unselected lines. */
-      for (const shop of orders) {
-        for (const item of shop.items) {
-          await dispatch(removeItemFromCartRedux(currentUser, { ...item, shopId: shop.shopId }));
+      /* The orders now exist. Nothing below may report the placement as
+         failed, or the customer retries and writes a duplicate order. */
+      try {
+        if (coupon && currentUser) {
+          const usedCoupons = currentUser.usedCoupons || [];
+          const existing = usedCoupons.find((c) => c.id === coupon.id);
+          const updated = existing
+            ? usedCoupons.map((c) => (c.id === coupon.id ? { ...c, used: parseInt(c.used, 10) + 1 } : c))
+            : [...usedCoupons, { ...coupon, used: 1 }];
+          await updateUser({ ...currentUser, usedCoupons: updated });
         }
+
+        /* Remove only what was ordered — the cart may hold unselected lines. */
+        for (const shop of orders) {
+          for (const item of shop.items) {
+            await dispatch(removeItemFromCartRedux(currentUser, { ...item, shopId: shop.shopId }));
+          }
+        }
+      } catch (cleanupErr) {
+        console.error(cleanupErr);
       }
       placedRef.current = true;
       setPlacedOrders(orders);

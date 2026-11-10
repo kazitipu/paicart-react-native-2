@@ -143,10 +143,13 @@ export const removeItemFromCart = async (userAuth, item) => {
   if (!userAuth || !userAuth.id) return;
   const cartRef = doc(firestore, 'carts', userAuth.id);
   const snapShot = await getDoc(cartRef);
-  const firestoreCart = snapShot.data().cart;
+  /* Buy Now skips the cart, so an account that has never added to cart has
+     no carts/{id} document at all - there is simply nothing to remove. */
+  const firestoreCart = snapShot.data()?.cart;
+  if (!Array.isArray(firestoreCart)) return [];
   let skusArray = item.skus.map((sku) => sku.sku_id);
   let updatedCart = firestoreCart.map((shop) => {
-    if (shop.items[0].id == item.id) {
+    if (shop.items?.[0]?.id == item.id) {
       if (shop.items[0].skus.length == item.skus.length) {
         return null;
       } else {
@@ -305,6 +308,23 @@ export const addCartItemTofirestore = async (userAuth, product) => {
   }
 };
 
+/* Firestore rejects a document holding `undefined` anywhere in it, and Buy Now
+   orders are built straight from the product API, where fields are often
+   absent. Only plain objects and arrays are walked, so Timestamps survive. */
+const stripUndefined = (value) => {
+  if (Array.isArray(value)) {
+    return value.filter((v) => v !== undefined).map(stripUndefined);
+  }
+  if (value && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)]),
+    );
+  }
+  return value;
+};
+
 export const addToOrdersApi = async (userAuth, orders) => {
   if (!userAuth || !userAuth.id) return;
   let ordersArray = [];
@@ -313,20 +333,17 @@ export const addToOrdersApi = async (userAuth, orders) => {
     const orderRef = doc(firestore, 'ordersApi', shop.orderId);
     const snapShot = await getDoc(orderRef);
     if (!snapShot.exists()) {
-      try {
-        await setDoc(orderRef, {
-          ...shop,
-          userId: userAuth.id,
-          displayName: userAuth.displayName,
-          uid: userAuth.userId,
-          month: getMonthName(),
-        });
-        const updatedSnapshot = await getDoc(orderRef);
-        ordersArray.push(updatedSnapshot.data());
-      } catch (error) {
-        console.log('error creating orders', error.message);
-        return;
-      }
+      const orderDoc = stripUndefined({
+        ...shop,
+        userId: userAuth.id,
+        displayName: userAuth.displayName || '',
+        uid: userAuth.userId,
+        month: getMonthName(),
+      });
+      /* Not caught here: the caller has to know the order was not written,
+         otherwise it goes on to empty the cart and ask for payment. */
+      await setDoc(orderRef, orderDoc);
+      ordersArray.push(orderDoc);
     } else {
       toast.error('this orderId was already added. try again');
     }
