@@ -82,6 +82,8 @@ export const setIntroModal = (introModal) => async (dispatch) => {
 export const addToOrdersApiRedux = (currentUser, orders) => async (dispatch) => {
   const ordersArray = await addToOrdersApi(currentUser, orders);
   dispatch({ type: 'ADD_TO_ORDERS_API', payload: ordersArray });
+  /* The orders newly saved, so the caller can tell a repeat checkout apart. */
+  return ordersArray;
 };
 
 export const updateSingleOrderApiRedux = (order) => async (dispatch) => {

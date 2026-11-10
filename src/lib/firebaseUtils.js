@@ -17,6 +17,7 @@ import {
   getCountFromServer,
   orderBy,
   limit,
+  writeBatch,
 } from '@react-native-firebase/firestore';
 import { ref, putFile, getDownloadURL } from '@react-native-firebase/storage';
 import { toast } from './toast';
@@ -325,29 +326,40 @@ const stripUndefined = (value) => {
   return value;
 };
 
+/* Saves one order per seller and returns the ones newly written; an empty list
+   means this checkout was already placed. Errors are not caught: the caller
+   must know nothing was saved before it empties the cart and asks for payment.
+
+   One batch, so several sellers save together or not at all. A repeat of the
+   same checkout reuses its order ids, so finding one of the customer's own
+   orders here means it is already saved and must not be written twice. */
 export const addToOrdersApi = async (userAuth, orders) => {
-  if (!userAuth || !userAuth.id) return;
-  let ordersArray = [];
+  if (!userAuth || !userAuth.id) {
+    throw new Error('Cannot place an order without a logged-in user');
+  }
+  const batch = writeBatch(firestore);
+  const ordersArray = [];
   for (let i = 0; i < orders.length; i++) {
     const shop = orders[i];
     const orderRef = doc(firestore, 'ordersApi', shop.orderId);
     const snapShot = await getDoc(orderRef);
-    if (!snapShot.exists()) {
-      const orderDoc = stripUndefined({
-        ...shop,
-        userId: userAuth.id,
-        displayName: userAuth.displayName || '',
-        uid: userAuth.userId,
-        month: getMonthName(),
-      });
-      /* Not caught here: the caller has to know the order was not written,
-         otherwise it goes on to empty the cart and ask for payment. */
-      await setDoc(orderRef, orderDoc);
-      ordersArray.push(orderDoc);
-    } else {
-      toast.error('this orderId was already added. try again');
+    if (snapShot.exists()) {
+      if (snapShot.data().userId !== userAuth.id) {
+        throw new Error('Order id already belongs to another order');
+      }
+      continue;
     }
+    const orderDoc = stripUndefined({
+      ...shop,
+      userId: userAuth.id,
+      displayName: userAuth.displayName || '',
+      uid: userAuth.userId,
+      month: getMonthName(),
+    });
+    batch.set(orderRef, orderDoc);
+    ordersArray.push(orderDoc);
   }
+  if (ordersArray.length > 0) await batch.commit();
   return ordersArray.sort((a, b) => b.time - a.time);
 };
 

@@ -15,7 +15,7 @@ import ProductImage from '@/components/ui/ProductImage';
 import PrePaymentModal from '@/components/PrePaymentModal';
 import { C, ORANGE2, Press, ScalePress, Price, Spinner } from '@/components/product/ui';
 import { TS, tpx, SHADOW_SM, CC, sized } from '@/components/cart/CartBits';
-import { addToOrdersApiRedux, removeItemFromCartRedux } from '@/store/actions';
+import { addToOrdersApiRedux, addToPendingOrdersRedux, removeItemFromCartRedux } from '@/store/actions';
 import { getSingleCoupon, updateUser, getAllPartials } from '@/lib/firebaseUtils';
 import { Timestamp } from '@/lib/firebase';
 import { getRedxCharge } from '@/lib/api';
@@ -662,7 +662,24 @@ export default function PlaceOrder() {
         timestamp: Timestamp.now(),
       });
 
-      await dispatch(addToOrdersApiRedux(currentUser, orders));
+      /* The ids are kept with the checkout before anything is written, so a
+         retry or coming back to this screen repeats these same orders instead
+         of creating new ones. */
+      await dispatch(
+        addToPendingOrdersRedux(
+          pendingOrders.map((shop, i) => ({ ...shop, orderId: orders[i].orderId })),
+        ),
+      );
+      const created = await dispatch(addToOrdersApiRedux(currentUser, orders));
+
+      /* Already saved by an earlier attempt: it can be paid from My Orders,
+         and this screen's totals may no longer match what was saved. */
+      if (created.length === 0) {
+        toast.info('This order was already placed.');
+        submittingRef.current = false;
+        navigation.navigate(TABS.ORDERS, { screen: 'BuyShipMyOrders' });
+        return;
+      }
 
       /* The orders now exist. Nothing below may report the placement as
          failed, or the customer retries and writes a duplicate order. */

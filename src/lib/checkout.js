@@ -131,7 +131,7 @@ export function buildOrderDocs(pendingOrders, ctx) {
 
     return {
       ...shop,
-      orderId: String(Math.floor(Math.random() * Date.now())),
+      orderId: shop.orderId || String(Math.floor(Math.random() * Date.now())),
       time: now.getTime(),
       orderedDate: now.toLocaleDateString('en-GB'),
       orderedTime: now.toLocaleTimeString('en-US'),
