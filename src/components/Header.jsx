@@ -263,7 +263,7 @@ export default function Header({ hidden = false, onLayout }) {
         <View className="flex-row items-center ml-auto" style={{ gap: 2 }}>
           <Pressable
             ref={wishRef}
-            onPress={() => (inRoot ? go('Wishlist', TABS.HOME) : navigation.navigate('Wishlist'))}
+            onPress={() => go('Wishlist', TABS.HOME)}
             className="p-2 active:opacity-60"
             hitSlop={4}
           >
