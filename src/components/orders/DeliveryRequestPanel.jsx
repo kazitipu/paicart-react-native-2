@@ -42,7 +42,7 @@ const STRIP_TONE = {
   requested: { bg: '#eff6ff', border: '#bfdbfe', fg: '#1d4ed8', Icon: CheckCircle2 },
   arranged: { bg: '#ecfdf5', border: '#a7f3d0', fg: '#047857', Icon: CheckCircle2 },
   delivered: { bg: '#ecfdf5', border: '#a7f3d0', fg: '#047857', Icon: PackageCheck },
-  cancelled: { bg: C.gray50, border: C.gray200, fg: C.gray600, Icon: XCircle },
+  cancelled: { bg: '#fff3f2', border: '#f8d3d0', fg: '#b4271d', Icon: XCircle },
 };
 
 export default function DeliveryRequestPanel({ kind, record, style }) {
@@ -57,6 +57,7 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
   const [methodKey, setMethodKey] = useState(null);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   /* A newer request from the server (or one Paicart has acted on) replaces
      the local copy; equal timestamps mean the same submission — take the
@@ -137,26 +138,64 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
   if (req && !open) {
     const tone = STRIP_TONE[req.status] || STRIP_TONE.requested;
     const StripIcon = tone.Icon;
+    const info = DELIVERY_METHODS.find((m) => m.key === req.method);
+    const addr = req.address;
+    const addrText = addr ? [addr.name, addr.mobileNo, addr.address, addr.thana, addr.district, addr.division].filter(Boolean).join(', ') : '';
+    const Row = ({ label, children }) => (
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 5 }}>
+        <Text style={{ width: 72, fontSize: 10.5, color: C.gray400 }}>{label}</Text>
+        <Text style={{ flex: 1, fontSize: 10.5, color: C.gray700 }}>{children}</Text>
+      </View>
+    );
     return (
-      <View
-        style={[
-          { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, borderColor: tone.border, backgroundColor: tone.bg, paddingHorizontal: 12, paddingVertical: 10 },
-          style,
-        ]}
-      >
-        <StripIcon size={15} color={tone.fg} />
-        <Text style={{ flex: 1, fontSize: 11.5, color: tone.fg }}>
-          <Text style={{ fontWeight: '800' }}>{DELIVERY_STATUS_LABEL[req.status] || DELIVERY_STATUS_LABEL.requested}</Text>
-          {req.label ? ` · ${req.label}` : ''}
-        </Text>
-        {changeable ? (
-          <Press onPress={startEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel={req.status === 'cancelled' ? 'Choose delivery again' : 'Change delivery request'}>
-            {({ pressed }) => (
-              <Text style={{ fontSize: 11.5, fontWeight: '800', color: ORANGE, textDecorationLine: 'underline', opacity: pressed ? 0.6 : 1 }}>
-                {req.status === 'cancelled' ? 'Choose again' : 'Change'}
-              </Text>
-            )}
+      <View style={[{ borderRadius: 12, borderWidth: 1, borderColor: tone.border, backgroundColor: tone.bg }, style]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10 }}>
+          <Press
+            onPress={() => setShowInfo((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showInfo }}
+            accessibilityLabel="Show delivery request details"
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+          >
+            <StripIcon size={15} color={tone.fg} />
+            <Text style={{ flex: 1, fontSize: 11.5, color: tone.fg }} numberOfLines={1}>
+              <Text style={{ fontWeight: '800' }}>{DELIVERY_STATUS_LABEL[req.status] || DELIVERY_STATUS_LABEL.requested}</Text>
+              {req.label ? ` · ${req.label}` : ''}
+            </Text>
+            {showInfo ? <ChevronUp size={14} color={tone.fg} /> : <ChevronDown size={14} color={tone.fg} />}
           </Press>
+          {changeable ? (
+            <Press onPress={startEdit} hitSlop={8} accessibilityRole="button" accessibilityLabel="Choose delivery again">
+              {({ pressed }) => (
+                <Text style={{ fontSize: 11.5, fontWeight: '800', color: ORANGE, textDecorationLine: 'underline', opacity: pressed ? 0.6 : 1 }}>
+                  Choose again
+                </Text>
+              )}
+            </Press>
+          ) : null}
+        </View>
+        {showInfo ? (
+          <View style={{ marginHorizontal: 10, marginBottom: 10, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 10, paddingBottom: 8, paddingTop: 3 }}>
+            <Row label="Method">
+              <Text style={{ fontWeight: '800' }}>{req.label}</Text>
+              {info ? ` — ${info.hint}` : ''}
+            </Row>
+            <Row label={req.method === 'office_pickup' ? 'Pickup' : 'Deliver to'}>
+              {req.method === 'office_pickup'
+                ? 'Collect from the Paicart warehouse'
+                : addrText || 'No address was saved with this request — Paicart will contact you.'}
+            </Row>
+            {req.method === 'office_pickup' && addrText ? (
+              <Row label="Contact">{[addr.name, addr.mobileNo].filter(Boolean).join(', ')}</Row>
+            ) : null}
+            <Row label="Requested">
+              {req.requestedDate || '—'}
+              {req.source === 'admin' ? ` · set by Paicart${req.enteredBy ? ` (${req.enteredBy})` : ''}` : ' · by you'}
+              {req.groupSize > 1 ? ` · together with ${req.groupSize - 1} other item${req.groupSize > 2 ? 's' : ''}` : ''}
+            </Row>
+            {req.note ? <Row label="Note">{req.note}</Row> : null}
+            {req.handledDate && req.status !== 'requested' ? <Row label="Updated">{req.handledDate}</Row> : null}
+          </View>
         ) : null}
       </View>
     );

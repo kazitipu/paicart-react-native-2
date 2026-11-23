@@ -15,7 +15,7 @@ import {
   canRequestDelivery,
   canChangeDeliveryRequest,
   isPathaoBooked,
-  isFullyPaid,
+  deliveryPaymentState,
   isMethodAllowed,
   deliveryDue,
   paymentBlockers,
@@ -24,7 +24,6 @@ import {
   defaultShippingAddress,
   recordIdOf,
 } from '@/lib/deliveryRequest';
-import { shipmentBill } from '@/lib/dashboardData';
 import {
   getAllOrdersApiRedux, getAllBookingsOfSingleUserRedux, getAllShipForMeOfSingleUserRedux,
 } from '@/store/actions';
@@ -88,19 +87,26 @@ function Pill({ label, tone }) {
     </View>
   );
 }
+/* Item tint by payment: fully paid green, part paid yellow, nothing paid or
+   not billed yet red. A ticked item gets a stronger border in the same hue. */
+const PAY_TONE = {
+  paid: { bg: '#f7fcf9', border: '#ddf0e4', on: '#7cc79a', pill: { bg: '#eaf6ee', border: '#d6ecdf', fg: '#2f7a4d' } },
+  partial: { bg: '#fffcf3', border: '#f3e6c2', on: '#e2bc5c', pill: { bg: '#fbf1d6', border: '#f1e1b4', fg: '#8a6414' } },
+  unpaid: { bg: '#fff8f7', border: '#f5dedb', on: '#e9958d', pill: { bg: '#fcebe9', border: '#f5d6d2', fg: '#b04a40' } },
+};
+PAY_TONE.not_billed = PAY_TONE.unpaid;
 const TONE = {
   stage: { bg: '#f2edff', border: '#e3daf9', fg: '#7350c0' },
   paid: { bg: '#ecf9f1', border: '#d3eedd', fg: '#22814f' },
   due: { bg: '#fff1e6', border: '#fbdcc4', fg: '#d95b07' },
-  muted: { bg: C.gray50, border: C.gray200, fg: C.gray500 },
 };
 
 function ItemRow({ item, checked, onToggle }) {
   const { kind, record } = item;
   const locked = !canChangeDeliveryRequest(record);
   const req = record.deliveryRequest;
-  const paid = isFullyPaid(kind, record);
-  const notBilled = kind === 'ship' && !(shipmentBill(record) > 0);
+  const pay = deliveryPaymentState(kind, record);
+  const tone = PAY_TONE[pay];
   const status = isPathaoBooked(record)
     ? `Pathao Booked · ${record.pathaoBooking.consignmentId}`
     : req
@@ -120,17 +126,17 @@ function ItemRow({ item, checked, onToggle }) {
         paddingHorizontal: 10,
         paddingVertical: 9,
         borderRadius: 12,
-        borderWidth: 1,
-        borderColor: checked ? '#ffd2b5' : C.gray100,
-        backgroundColor: locked ? C.gray50 : checked ? '#fff7f0' : pressed ? C.gray50 : '#ffffff',
-        opacity: locked ? 0.7 : 1,
+        borderWidth: checked && !locked ? 1.5 : 1,
+        borderColor: locked ? C.gray200 : checked ? tone.on : tone.border,
+        backgroundColor: locked ? C.gray50 : tone.bg,
+        opacity: locked ? 0.6 : pressed ? 0.85 : 1,
       })}
     >
       <View
         style={{
           width: 20, height: 20, marginTop: 1, borderRadius: 6, borderWidth: 2,
-          borderColor: locked ? C.gray300 : checked ? ORANGE : C.gray300,
-          backgroundColor: checked && !locked ? ORANGE : '#ffffff',
+          borderColor: locked ? C.gray300 : checked ? tone.on : C.gray300,
+          backgroundColor: checked && !locked ? tone.on : '#ffffff',
           alignItems: 'center', justifyContent: 'center',
         }}
       >
@@ -143,17 +149,16 @@ function ItemRow({ item, checked, onToggle }) {
         ) : null}
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
           <Pill label="To Receive" tone={TONE.stage} />
-          {paid ? (
-            <Pill label="Fully paid" tone={TONE.paid} />
-          ) : notBilled ? (
-            <Pill label="Not billed yet" tone={TONE.muted} />
-          ) : (
-            <Pill label={`${money(deliveryDue(kind, record))} due`} tone={TONE.due} />
-          )}
+          <Pill
+            tone={tone.pill}
+            label={pay === 'paid' ? 'Fully paid'
+              : pay === 'not_billed' ? 'Not billed yet'
+                : `${money(deliveryDue(kind, record))} due${pay === 'partial' ? ' · part paid' : ''}`}
+          />
         </View>
         {status ? (
           <Text style={{ fontSize: 9.5, fontWeight: '700', color: locked ? C.gray500 : '#1d4ed8', marginTop: 5 }} numberOfLines={2}>
-            {status}{locked ? ' — can’t be changed' : ''}
+            {status}{locked ? ' — already requested; you can request again only if Paicart rejects it' : ''}
           </Text>
         ) : null}
       </View>

@@ -20,8 +20,8 @@
  *     groupId / groupSize: set when several records were requested together }
  * A customer can't pick Van / Truck or Sundorbon unless every record in the
  * request is fully paid; Paicart staff (source 'admin') may override.
- * status: 'requested' (customer may still change it) → set by Paicart:
- *   'arranged' | 'delivered' | 'cancelled'.
+ * status: 'requested' → set by Paicart: 'arranged' | 'delivered' |
+ *   'cancelled' (shown as Rejected — only then can it be requested again).
  * A Pathao booking made by Paicart lives in `pathaoBooking` (consignmentId).
  *
  * SAME FILE in paicart-nextjs15 and paicart-react-native (src/lib/) — keep
@@ -90,11 +90,20 @@ export const isMethodAllowed = (method, fullyPaid) => !!method && (!method.needs
 
 export const isPathaoBooked = (rec) => !!rec?.pathaoBooking?.consignmentId;
 
-/* The customer may change their choice until Paicart acts on it, and may
-   choose again after Paicart cancels a request */
+/* One request at a time: once a request is submitted the record can't be
+   requested again until Paicart rejects it (stored status 'cancelled'). */
 export const canChangeDeliveryRequest = (rec) =>
   !isPathaoBooked(rec) &&
-  (!rec?.deliveryRequest || ['requested', 'cancelled'].includes(rec.deliveryRequest.status));
+  (!rec?.deliveryRequest || !rec.deliveryRequest.method || rec.deliveryRequest.status === 'cancelled');
+
+/* For colouring an item by how much of its invoice is paid:
+   'paid' (green) | 'partial' (yellow) | 'unpaid' or 'not_billed' (red) */
+export const deliveryPaymentState = (kind, rec) => {
+  if (kind === 'ship' && !(shipmentBill(rec) > 0)) return 'not_billed';
+  if (isFullyPaid(kind, rec)) return 'paid';
+  const paid = ((rec && rec.payments) || []).reduce((a, p) => a + Math.max(parseInt(p && p.amount, 10) || 0, 0), 0);
+  return paid > 0 ? 'partial' : 'unpaid';
+};
 
 /* The customer's default shipping address, copied onto the request so
    Paicart sees where to deliver even if the record has no address of its
@@ -179,5 +188,5 @@ export const DELIVERY_STATUS_LABEL = {
   requested: 'Delivery Request Submitted',
   arranged: 'Delivery Arranged',
   delivered: 'Delivered',
-  cancelled: 'Delivery Request Cancelled',
+  cancelled: 'Delivery Request Rejected',
 };
