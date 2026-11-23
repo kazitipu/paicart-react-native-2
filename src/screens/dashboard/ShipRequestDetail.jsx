@@ -4,7 +4,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import {
-  ArrowLeft, Package, Plane, Ship, MapPin, Calendar, Hash, Weight, Box, Layers, Pencil, Check, Truck, Navigation2,
+  ArrowLeft, Package, Plane, Ship, MapPin, Calendar, Hash, Weight, Box, Layers, Pencil, Check, Truck,
   CreditCard, FileText,
 } from 'lucide-react-native';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -12,6 +12,7 @@ import CopyIdButton from '@/components/CopyIdButton';
 import ProductImage from '@/components/ui/ProductImage';
 import ShipmentPaymentModal from '@/components/shipping/ShipmentPaymentModal';
 import ShipmentEditModal from '@/components/shipping/ShipmentEditModal';
+import CartonBreakdown from '@/components/shipping/CartonBreakdown';
 import StartShippingModal from '@/components/shipping/StartShippingModal';
 import { ShippingInfoCard, DocxPreviewModal, ImagePreview, openExternal } from '@/components/shipping/ShipmentDocs';
 import { sf, SC, StatusBadge, PaymentBadge, ShipmentProgressVertical } from '@/components/shipping/ShipBits';
@@ -21,7 +22,11 @@ import { getAllShipForMeOfSingleUserRedux, updateShipForMeRedux, updateShipmentR
 import { canPayShipment, getTotal } from '@/lib/shipForMe';
 import { readyStepLabel } from '@/lib/shipment';
 import { toast } from '@/lib/toast';
+import { derivePaymentState, shipmentDue } from '@/lib/paymentState';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import AutoRejectedNotice from '@/components/shipping/AutoRejectedNotice';
 import { TABS } from '@/navigation/routes';
+import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/ship-for-me/my-request/[bookingId]/page.jsx, < 640px.
@@ -220,15 +225,10 @@ export default function ShipRequestDetail() {
   const canStartShip = req.status === 'Rates Provided' && !req.shipping;
   const hasCharge = !!req.shippingChargeCustomer;
   const canPayNow = canPayShipment(req);
-  const trackingChips = req.trackingNo
-    ? String(req.trackingNo)
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
 
   const stats = [
-    { Icon: Weight, label: 'Weight', value: req.receivedWeight ? `${req.receivedWeight} kg` : req.weight ? `${req.weight} kg` : '—' },
+    /* actual (warehouse) weight once received, else the customer's estimate */
+    { Icon: Weight, label: req.receivedWeight ? 'Actual WT' : 'Est. WT', value: req.receivedWeight ? `${req.receivedWeight} kg` : parseFloat(req.weight) > 0 ? `~${req.weight} kg` : '—' },
     { Icon: Box, label: 'Qty', value: req.productQuantity || '—' },
     { Icon: Layers, label: 'CBM', value: req.totalCbm || '—' },
     { Icon: Hash, label: 'Rate/kg', value: req.customerRate ? `৳${req.customerRate}` : req.result?.perKg ? `৳${req.result.perKg}` : '—' },
@@ -327,7 +327,7 @@ export default function ShipRequestDetail() {
                   <Text style={[sf('base'), { fontWeight: '700', color: C.gray800 }]}>{req.othersProductName || '—'}</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 4 }}>
                     <StatusBadge status={req.status} req={req} />
-                    <PaymentBadge status={req.paymentStatus} />
+                    <PaymentBadge status={derivePaymentState(req, shipmentDue(req))} />
                   </View>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 6 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -364,29 +364,6 @@ export default function ShipRequestDetail() {
                       </View>
                     )}
                   </View>
-
-                  {trackingChips.length > 0 && (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                      {trackingChips.map((t, i) => (
-                        <View
-                          key={i}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 4,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            borderRadius: 8,
-                            backgroundColor: SC.TEAL,
-                            boxShadow: '0 1px 6px rgba(13,148,136,0.267)',
-                          }}
-                        >
-                          <Navigation2 size={9} color="#ffffff" />
-                          <Text style={[sf(11), { fontWeight: '700', color: '#ffffff' }]}>{t}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
                 </View>
               </View>
 
@@ -490,6 +467,13 @@ export default function ShipRequestDetail() {
                 </View>
               )}
 
+              <AutoRejectedNotice req={req} />
+
+              {/* Payment request waiting for admin review */}
+              {req.paymentRequested && req.paymentStatus !== 'Paid' && (
+                <PendingPaymentNotice request={req.pendingPaymentRequest} style={{ marginTop: 12 }} />
+              )}
+
               {/* Action buttons */}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12 }}>
                 {canStartShip && (
@@ -537,6 +521,12 @@ export default function ShipRequestDetail() {
             )}
           </View>
 
+          {/* Request Delivery — To Receive only (renders nothing otherwise). */}
+          <DeliveryRequestPanel kind="ship" record={req} />
+
+          {/* ── Tracking numbers and their cartons ── */}
+          <CartonBreakdown record={req} />
+
           {/* ── Shipment Progress (the mobile vertical stepper) ── */}
           <View style={{ backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 1, borderColor: C.gray100, padding: 16 }}>
             <ShipmentProgressVertical score={req.shipmentStatusScore || 1} req={req} />
@@ -562,13 +552,17 @@ export default function ShipRequestDetail() {
               ['Product details', req.productVariant],
               ['Status', req.status || 'Pending'],
               ['Payment Status', req.paymentStatus || 'Not Paid'],
-              ['Received weight', req.receivedWeight ? `${req.receivedWeight}Kg` : null],
+              ['Est. weight', parseFloat(req.weight) > 0 ? `${req.weight}Kg` : null],
+              ['Actual weight', req.receivedWeight ? `${req.receivedWeight}Kg` : null],
               ['Rate/kg', req.customerRate ? `${req.customerRate}Tk` : null],
               ['Packaging & other cost', req.otherCost ? `${req.otherCost}Tk` : null],
               ['Discount', req.discount ? `${req.discount}Tk` : null],
               ['Refund amount', req.refund ? `${req.refund}Tk` : null],
               ['Total shipping charge', req.shippingChargeCustomer ? `${req.shippingChargeCustomer}Tk` : null],
               ['Total Paid', `${getTotal(req)}Tk`],
+              /* Total Paid is the gross amount — show what the customer is
+                 actually out of pocket once a refund has been given */
+              ['Net paid (after refund)', parseFloat(req.refund) > 0 ? `${getTotal(req) - Math.round(parseFloat(req.refund))}Tk` : null],
               ['Refund note', req.refundNote],
             ]}
             footer={
@@ -618,10 +612,6 @@ export default function ShipRequestDetail() {
             rows={[
               ['Customer Name', req.displayName],
               ['Shipping mark', req.shippingMark],
-              [
-                'Tracking No',
-                (req.trackingNumbers?.length ? req.trackingNumbers : req.trackingNo?.split?.(',').filter(Boolean))?.join(', ') || req.trackingNo,
-              ],
               ['Cargo company', 'AR shipper'],
               ['Lot Number', req.lotNo ? req.lotNo.toString().replace('CB', 'AR') : null],
               ['Carton number', req.ctnNo ? req.ctnNo.toString().replace('CB', 'AR') : null],

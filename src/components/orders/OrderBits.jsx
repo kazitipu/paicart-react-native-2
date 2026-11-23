@@ -11,6 +11,7 @@ import { stepsFor } from '@/lib/shipForMe';
 import { isSeaShipment, statusDisplay } from '@/lib/shipment';
 import { UNPAID_WINDOW_MS } from '@/lib/orderTabs';
 import useNow from '@/lib/useNow';
+import PaymentStateBadge from '@/components/ui/PaymentStateBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Pieces shared by the My Orders list and the order detail port
@@ -80,17 +81,15 @@ export const enBDDate = (ms) => {
 /* The web's order date: `time` formatted, else the stored `orderedDate`. */
 export const orderDate = (order) => (order.time ? enBDDate(order.time) : order.orderedDate || '__');
 
-const BN_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-const BN_MONTHS = [
-  'জানুয়ারী', 'ফেব্রুয়ারী', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
-  'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর',
+const LONG_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
-const bnNum = (n) => String(n).replace(/\d/g, (c) => BN_DIGITS[c]);
-/* toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' }) → "৭ নভেম্বর, ২০২৬".
-   Hermes ships no bn locale data, so it is spelled out here. */
-export const bnBDDate = (ms) => {
+/* toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) → "7 November 2026".
+   Spelled out so it looks the same whatever Intl data the Hermes build has. */
+export const longDate = (ms) => {
   const d = new Date(ms);
-  return `${bnNum(d.getDate())} ${BN_MONTHS[d.getMonth()]}, ${bnNum(d.getFullYear())}`;
+  return `${d.getDate()} ${LONG_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 };
 /* Plain toLocaleDateString() (en-US) → "11/4/2026" */
 export const usDate = (ms) => {
@@ -132,18 +131,9 @@ export function Pill({ color = 'gray', Icon, spin = false, shrink, children }) {
   );
 }
 
-export function PayBadge({ status, shrink }) {
-  if (!status || status === 'purchaseLater') return <Pill shrink={shrink} color="gray">Not Paid</Pill>;
-  if (status === 'Paid') return <Pill shrink={shrink} color="emerald" Icon={Check}>Paid</Pill>;
-  if (status === 'Partially Paid') return <Pill shrink={shrink} color="orange">Partially Paid</Pill>;
-  if (status === 'pending') {
-    return (
-      <Pill shrink={shrink} color="amber" Icon={Check} spin>
-        Payment Pending
-      </Pill>
-    );
-  }
-  return <Pill shrink={shrink} color="gray">{status}</Pill>;
+/* Delegates to the redesigned badge; callers should pass derivePaymentState() */
+export function PayBadge({ status }) {
+  return <PaymentStateBadge status={status} />;
 }
 
 export function OrderStatusPill({ order, shrink }) {
@@ -170,7 +160,7 @@ export function Row({ label, value, bold, tone, small, shrink }) {
       <Text
         style={[
           fs(size, shrink),
-          { fontWeight: '700', color: tone === 'green' ? C.green600 : tone === 'due' ? ORANGE : C.gray800 },
+          { fontWeight: '700', color: tone === 'green' ? C.green600 : tone === 'due' ? ORANGE : tone === 'refund' ? '#7c3aed' : C.gray800 },
         ]}
       >
         {value}
@@ -313,7 +303,7 @@ export function UnpaidCountdownBanner({ order, shrink }) {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
         <Clock size={13} color="#F5222D" />
         <Text style={[fs(11, shrink), { fontWeight: '700', color: '#F5222D', flexShrink: 1 }]}>
-          পেমেন্ট বাকি (শেষ সময়: {bnBDDate(deadline)})
+          Payment pending (deadline: {longDate(deadline)})
         </Text>
       </View>
       <View
@@ -382,8 +372,11 @@ export function ShipmentProgressVertical({ score = 1, req }) {
       </Text>
       <View style={{ marginTop: 8 }}>
         {steps.map((step, i) => {
-          const done = i + 1 < active;
-          const current = i + 1 === active;
+          /* The last stage reached is finished, not "in progress" — a delivered
+             order showed Delivered as a half-done ring. */
+          const finished = Number(score) >= steps.length;
+          const done = finished || i + 1 < active;
+          const current = !finished && i + 1 === active;
           const isLast = i === steps.length - 1;
           const Icon = icons[i];
           return (

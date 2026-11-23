@@ -99,7 +99,7 @@ export default function ShipmentInvoice() {
               <InvoiceField label="Total CBM" value={req.totalCbm ? `${req.totalCbm} cbm` : ''} />
               <InvoiceField
                 label="Actual Weight"
-                value={req.receivedWeight ? `${req.receivedWeight} kg` : req.weight ? `${req.weight} kg (booked)` : 'Pending'}
+                value={req.receivedWeight ? `${req.receivedWeight} kg` : req.weight ? `${req.weight} kg (est.)` : 'Pending'}
               />
             </InvoiceGrid>
             {tracking.length > 0 && (

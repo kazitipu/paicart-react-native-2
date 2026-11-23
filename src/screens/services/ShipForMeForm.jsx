@@ -391,6 +391,8 @@ export default function ShipForMeForm() {
     productQuantity: restored?.productQuantity || '',
     ctnQuantity: restored?.ctnQuantity || '',
     totalCbm: restored?.totalCbm || '',
+    /* customer's estimate — shown as "Est. weight" until the warehouse records the actual (receivedWeight is the billed one) */
+    weight: restored?.weight || '',
     productVariant: restored?.productVariant || '',
   });
   const [productContains, setProductContains] = useState(init.productContains);
@@ -545,7 +547,7 @@ export default function ShipForMeForm() {
 
   const resetForm = () => {
     const fresh = initialState(null);
-    vals.current = { othersProductName: '', productQuantity: '', ctnQuantity: '', totalCbm: '', productVariant: '' };
+    vals.current = { othersProductName: '', productQuantity: '', ctnQuantity: '', totalCbm: '', weight: '', productVariant: '' };
     trackVals.current = Object.fromEntries(fresh.trackingFields.map((f) => [f.id, '']));
     setMethod(fresh.method);
     setShipFrom(fresh.shipFrom);
@@ -572,6 +574,7 @@ export default function ShipForMeForm() {
     if (!v.productQuantity) { toast.error('Quantity is required'); return; }
     if (!v.ctnQuantity) { toast.error('Total box is required'); return; }
     if (!v.totalCbm) { toast.error('Total CBM is required'); return; }
+    if (!(parseFloat(v.weight) > 0)) { toast.error('Estimated weight (kg) is required'); return; }
     if (!trackingValues.some((x) => x.trim())) { toast.error('At least one tracking number is required'); return; }
     if (!imageUrl) { toast.error('Product picture is required'); return; }
     if (!waybillImage) { toast.error('Waybill picture is required'); return; }
@@ -597,6 +600,7 @@ export default function ShipForMeForm() {
           productQuantity: v.productQuantity,
           ctnQuantity: v.ctnQuantity,
           totalCbm: v.totalCbm,
+          weight: String(parseFloat(v.weight)),
           productVariant: v.productVariant,
           shipTo: dates.shipTo2,
           validTo: dates.validTo,
@@ -606,7 +610,6 @@ export default function ShipForMeForm() {
           waybillImage,
           packingListUrl,
           /* preserved old fields — not collected via this form anymore */
-          weight: '',
           productType: '',
           productsTotalCost: '',
           productBrand: '',
@@ -818,19 +821,24 @@ export default function ShipForMeForm() {
                   onPress={() => setSheet('contains')}
                 />
               </View>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
+              {/* 2 × 2 so four fields stay readable on a phone */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', columnGap: 12, rowGap: 12 }}>
                 {[
                   ['productQuantity', 'Quantity', 'Pcs'],
                   ['ctnQuantity', 'Total Box', 'Box'],
                   ['totalCbm', 'Total CBM', 'CBM'],
-                ].map(([k, label, ph]) => (
-                  <View key={k} style={{ flex: 1, minWidth: 0 }}>
+                  ['weight', 'Est. Weight', 'Kg', 'decimal-pad'],
+                ].map(([k, label, ph, keyboardType]) => (
+                  <View key={k} style={{ width: '47%', flexGrow: 1, minWidth: 0 }}>
                     <Label required>{label}</Label>
-                    {/* type="text" on the web — any text, so the default keyboard */}
-                    <FormInput defaultValue={vals.current[k]} onChangeText={setVal(k)} placeholder={ph} />
+                    {/* type="text" on the web — any text, so the default keyboard; weight is numeric */}
+                    <FormInput defaultValue={vals.current[k]} onChangeText={setVal(k)} placeholder={ph} keyboardType={keyboardType} />
                   </View>
                 ))}
               </View>
+              <Text style={{ fontSize: 11, color: C.gray400, marginTop: -4 }}>
+                Estimated total weight in kg. You are billed on the actual weight measured at our warehouse.
+              </Text>
               <View>
                 <Label>Product Details (Any Text)</Label>
                 <FormInput

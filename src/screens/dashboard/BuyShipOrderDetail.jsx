@@ -5,17 +5,20 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   ArrowLeft, Truck, MapPin, CreditCard, RefreshCw, FileText, Image as ImageIcon, Scale, Receipt, ChevronDown,
-  ChevronUp, ShoppingBag, RotateCcw,
+  ChevronUp, ShoppingBag, RotateCcw, ArrowUpRight,
 } from 'lucide-react-native';
 import DashboardLayout from '@/components/DashboardLayout';
 import OrderPaymentModal from '@/components/OrderPaymentModal';
 import RefundApplyModal from '@/components/RefundApplyModal';
 import CopyIdButton from '@/components/CopyIdButton';
+import CartonBreakdown from '@/components/shipping/CartonBreakdown';
 import ProductImage from '@/components/ui/ProductImage';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import { derivePaymentState } from '@/lib/paymentState';
 import { ShippingNote } from '@/components/orders/MyOrderCard';
 import {
   OC, Row, DashedDivider, PriceTag, ItemThumb, IdMethodStrip, ShipmentProgressVertical, orderDate, money,
-  Pill,
+  Pill, PayBadge,
 } from '@/components/orders/OrderBits';
 import { C, SHADOW, ORANGE, Press, Spinner } from '@/components/product/ui';
 import { getAllOrdersApiRedux } from '@/store/actions';
@@ -23,11 +26,13 @@ import { getAllPartials } from '@/lib/firebaseUtils';
 import { activePartialFrom } from '@/lib/partialOffers';
 import { getSingleShopTotal, getTotalPaid, getTotalDue, canPayOrder } from '@/lib/orderMath';
 import { applyDiscount } from '@/lib/discount';
-import { refundMode, showRefundBlock, buyAgainProductId } from '@/lib/refund';
+import { refundMode, showRefundBlock, buyAgainProductId, refundedAmount } from '@/lib/refund';
 import { isRefundGiven } from '@/lib/buckets';
 import { statusDisplay } from '@/lib/shipment';
 import { cdn } from '@/lib/cdn';
+import { trackingNumbersOf } from '@/lib/cartons';
 import { TABS } from '@/navigation/routes';
+import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/buy-and-ship-for-me/my-orders/[orderId]/page.jsx at
@@ -51,14 +56,6 @@ const CARD = {
   borderColor: C.gray100,
   boxShadow: SHADOW.base,
   overflow: 'hidden',
-};
-
-const payStatusConfig = (s) => {
-  if (!s || s === 'purchaseLater') return { label: 'Not Paid', bg: C.gray100, fg: C.gray600 };
-  if (s === 'Paid') return { label: 'Paid', bg: OC.green100, fg: C.green700 };
-  if (s === 'Partially Paid') return { label: 'Partially Paid', bg: OC.orange100, fg: OC.orange700 };
-  if (s === 'pending') return { label: 'Pending', bg: OC.purple100, fg: OC.purple700 };
-  return { label: s, bg: C.gray100, fg: C.gray600 };
 };
 
 const orderStatusConfig = (s) => {
@@ -94,6 +91,46 @@ function PillButton({ Icon, label, bg, pressedBg, onPress, fg = '#ffffff', iconS
     >
       <Icon size={iconSize} color={fg} />
       <Text style={[TXT.xs, { fontWeight: '700', color: fg }]}>{label}</Text>
+    </Press>
+  );
+}
+
+/* White card-style invoice button: orange rounded-square FileText icon, a
+   two-line label and an ArrowUpRight. `rounded-xl bg-white border
+   border-gray-200 shadow-sm pl-1.5 pr-3.5 py-1.5 gap-2.5` */
+function InvoiceButton({ onPress }) {
+  return (
+    <Press
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel="View Invoice"
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingLeft: 6,
+        paddingRight: 14,
+        paddingVertical: 6,
+        borderRadius: 12,
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: pressed ? 'rgba(255,106,0,0.5)' : C.gray200,
+        boxShadow: SHADOW.base,
+        transform: [{ scale: pressed ? 0.98 : 1 }],
+      })}
+    >
+      {({ pressed }) => (
+        <>
+          <View style={{ width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: ORANGE }}>
+            <FileText size={14} color="#ffffff" />
+          </View>
+          <View>
+            <Text style={[TXT.xs, { fontWeight: '800', color: C.gray800 }]}>View Invoice</Text>
+            <Text style={[TXT.p10, { fontWeight: '500', color: C.gray400 }]}>Open invoice</Text>
+          </View>
+          <ArrowUpRight size={14} color={pressed ? ORANGE : C.gray400} />
+        </>
+      )}
     </Press>
   );
 }
@@ -216,13 +253,13 @@ export default function BuyShipOrderDetail() {
   }
 
   const score = parseInt(order.shipmentStatusScore || 1, 10);
-  const payCfg = payStatusConfig(order.paymentStatus);
   const orderCfg = orderStatusConfig(order.orderStatus);
   const isRejected = (order.orderStatus || '').toLowerCase() === 'reject';
   const goodsTotal = order.actualTotal ? parseInt(order.actualTotal, 10) : getSingleShopTotal(order);
   const totalPaid = getTotalPaid(order);
   const totalDue = getTotalDue(order);
   const totalBill = totalDue + totalPaid;
+  const refunded = refundedAmount(order);
   const hasShipping = parseInt(order.shippingChargeCustomer, 10) > 0;
   const totalQty =
     order.items?.reduce(
@@ -297,12 +334,15 @@ export default function BuyShipOrderDetail() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <StatusChip cfg={orderCfg} />
-                <StatusChip cfg={payCfg} />
+                <PayBadge status={derivePaymentState(order, totalDue)} />
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Truck size={12} color={C.gray400} />
-                <Text style={[TXT.xs, { fontWeight: '600', color: C.gray700 }]}>{order.trackingNo || 'Tracking TBD'}</Text>
-              </View>
+              {/* Tracking numbers themselves live in the Tracking & Cartons card below. */}
+              {!trackingNumbersOf(order).length && !order.cartons?.length && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Truck size={12} color={C.gray400} />
+                  <Text style={[TXT.xs, { fontWeight: '600', color: C.gray700 }]}>Tracking TBD</Text>
+                </View>
+              )}
             </View>
             {/* Actions */}
             <View style={{ paddingHorizontal: 16, paddingBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -325,16 +365,20 @@ export default function BuyShipOrderDetail() {
                 />
               )}
               {showInvoice && (
-                <PillButton
-                  Icon={FileText}
-                  label="View Invoice"
-                  bg="#a3422b"
-                  pressedBg="#8b3622"
+                <InvoiceButton
                   onPress={() => navigation.navigate('OrderInvoice', { bookingId: order.orderId, kind: 'order' })}
                 />
               )}
             </View>
           </View>
+
+          {/* Request Delivery — To Receive only (renders nothing otherwise). */}
+          <DeliveryRequestPanel kind="order" record={order} />
+
+          {/* Payment request waiting for admin review */}
+          {order.paymentStatus === 'pending' && !isRejected && (
+            <PendingPaymentNotice request={order.pendingPaymentRequest} />
+          )}
 
           {/* Order Id / Shipment Method */}
           <IdMethodStrip order={order} />
@@ -419,6 +463,9 @@ export default function BuyShipOrderDetail() {
               )}
             </View>
           </View>
+
+          {/* Tracking numbers and their cartons */}
+          <CartonBreakdown record={order} />
 
           {/* Shipment progress */}
           {!isRejected && (
@@ -522,6 +569,14 @@ export default function BuyShipOrderDetail() {
                   <Text style={[TXT.lg, { fontWeight: '800', color: ORANGE }]}>৳{money(totalDue)}</Text>
                 </View>
               </View>
+              {/* Money returned after the bill was settled — every total above
+                  still reads the full amount paid. */}
+              {refunded > 0 && (
+                <>
+                  <Row label="Refunded to you:" value={`↩ ৳${money(refunded)}`} tone="refund" />
+                  <Row bold label="Net Paid (after refund):" value={`৳${money(totalPaid - refunded)}`} tone="green" />
+                </>
+              )}
             </View>
           </Collapsible>
 
@@ -634,9 +689,9 @@ export default function BuyShipOrderDetail() {
                       Refund {order.refundStatus}
                     </Text>
                   </View>
-                  {!!order.refund && order.refund !== 0 && (
+                  {refunded > 0 && (
                     <Text style={[TXT.xs, { color: C.gray500 }]}>
-                      Refunded: <Text style={{ fontWeight: '700' }}>৳{money(parseInt(order.refund, 10))}</Text>
+                      Refunded: <Text style={{ fontWeight: '700' }}>৳{money(refunded)}</Text>
                     </Text>
                   )}
                 </View>

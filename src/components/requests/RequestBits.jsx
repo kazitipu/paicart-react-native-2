@@ -7,6 +7,7 @@ import { STATUS_BADGE } from '@/components/ui/StatusBadge';
 import { SOFT_COLORS } from '@/components/ui/SoftPill';
 import { READY_STATUS, READY_SEA_LABEL, isSeaShipment } from '@/lib/shipment';
 import { TABS } from '@/navigation/routes';
+import PaymentStateBadge from '@/components/ui/PaymentStateBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Pieces of the web "My Product Requests" pages
@@ -50,15 +51,7 @@ export function RequestStatusBadge({ status, req }) {
 
 /* _shared PaymentBadge at < 640px. */
 export function RequestPaymentBadge({ status }) {
-  const val = status || 'Not Paid';
-  const pill = (color, label) => (
-    <SoftPill color={color} size={9} px={8} py={2}>
-      {label}
-    </SoftPill>
-  );
-  if (val === 'Paid') return pill('emerald', '✓ Paid');
-  if (val === 'Partially Paid') return pill('amber', '◑ Partial');
-  return pill('gray', '✕ Unpaid');
+  return <PaymentStateBadge status={status} size={9} />;
 }
 
 /* Collapsible header button: `w-full flex justify-between gap-2 bg-gray-50

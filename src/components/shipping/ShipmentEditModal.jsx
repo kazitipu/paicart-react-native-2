@@ -117,6 +117,7 @@ function EditPanel({ booking, onClose, onSave, saving }) {
     productQuantity: booking.productQuantity || '',
     ctnQuantity: booking.ctnQuantity || '',
     totalCbm: booking.totalCbm || '',
+    weight: booking.weight || '',
     productVariant: booking.productVariant || '',
   });
   const initialTracking = () => {
@@ -284,6 +285,10 @@ function EditPanel({ booking, onClose, onSave, saving }) {
       toast.error('Total CBM is required');
       return;
     }
+    if (!(parseFloat(v.weight) > 0)) {
+      toast.error('Estimated weight (kg) is required');
+      return;
+    }
     if (imageLoading || waybillLoading || packingListLoading) {
       toast.error('Wait for uploads to finish');
       return;
@@ -299,6 +304,7 @@ function EditPanel({ booking, onClose, onSave, saving }) {
       productQuantity: v.productQuantity,
       ctnQuantity: v.ctnQuantity,
       totalCbm: v.totalCbm,
+      weight: String(parseFloat(v.weight)),
       productVariant: v.productVariant,
       shipTo,
       validTo,
@@ -311,7 +317,7 @@ function EditPanel({ booking, onClose, onSave, saving }) {
     });
   };
 
-  const textInput = (key, placeholder, { multiline = false } = {}) => (
+  const textInput = (key, placeholder, { multiline = false, keyboardType } = {}) => (
     <View style={inputBox(focused === key, { height: multiline ? sf('sm').lineHeight * 3 + 22 : INPUT_H, justifyContent: 'center' })}>
       <TextInput
         ref={(r) => {
@@ -324,6 +330,7 @@ function EditPanel({ booking, onClose, onSave, saving }) {
         placeholder={placeholder}
         placeholderTextColor={PLACEHOLDER}
         multiline={multiline}
+        keyboardType={keyboardType}
         textAlignVertical={multiline ? 'top' : 'center'}
         onFocus={() => onFocus(key)}
         onBlur={() => onBlur(key)}
@@ -473,6 +480,11 @@ function EditPanel({ booking, onClose, onSave, saving }) {
                 <Label>Total CBM</Label>
                 {textInput('totalCbm', 'CBM')}
               </View>
+            </View>
+
+            <View>
+              <Label>Est. Weight (kg)</Label>
+              {textInput('weight', 'Kg', { keyboardType: 'decimal-pad' })}
             </View>
 
             <View>

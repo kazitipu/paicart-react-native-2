@@ -8,6 +8,7 @@ import {
 import { C, ORANGE, Press } from '@/components/product/ui';
 import { stepsFor } from '@/lib/shipForMe';
 import { isSeaShipment, READY_STATUS, READY_SEA_LABEL } from '@/lib/shipment';
+import PaymentStateBadge from '@/components/ui/PaymentStateBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Pieces of web pages/dashboard/ship-for-me/my-request/_shared.jsx (and the
@@ -195,25 +196,9 @@ export function StatusBadge({ status, req }) {
   );
 }
 
+/* Delegates to the redesigned badge; callers should pass derivePaymentState() */
 export function PaymentBadge({ status }) {
-  const val = status || 'Not Paid';
-  if (val === 'Paid')
-    return (
-      <SoftPill color="emerald" size={9} px={8} py={2}>
-        ✓ Paid
-      </SoftPill>
-    );
-  if (val === 'Partially Paid')
-    return (
-      <SoftPill color="amber" size={9} px={8} py={2}>
-        ◑ Partial
-      </SoftPill>
-    );
-  return (
-    <SoftPill color="gray" size={9} px={8} py={2}>
-      ✕ Unpaid
-    </SoftPill>
-  );
+  return <PaymentStateBadge status={status} size={9} />;
 }
 
 /* ── Collapsible section (list card) ──
@@ -298,8 +283,11 @@ export function ShipmentProgressVertical({ score = 1, req }) {
       </Text>
       <View style={{ marginTop: 8 }}>
         {steps.map((step, i) => {
-          const done = i + 1 < active;
-          const current = i + 1 === active;
+          /* The last stage reached is finished, not "in progress" — a delivered
+             order showed Delivered as a half-done ring. */
+          const finished = Number(score) >= steps.length;
+          const done = finished || i + 1 < active;
+          const current = !finished && i + 1 === active;
           const isLast = i === steps.length - 1;
           const Icon = icons[i];
           return (

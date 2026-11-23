@@ -65,6 +65,7 @@ export const ROUTES = {
   Points: { path: 'pages/dashboard/points', tab: TABS.ORDERS },
   UserInformation: { path: 'pages/dashboard/user/information', tab: TABS.ORDERS },
   UserSecurity: { path: 'pages/dashboard/user/security', tab: TABS.ORDERS },
+  Notifications: { path: 'pages/dashboard/notifications', tab: TABS.ORDERS },
 
   /* ── Services & public ── */
   ShipForMeForm: { path: 'pages/ship-for-me', tab: TABS.MORE },

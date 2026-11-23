@@ -13,7 +13,7 @@ import { statusDisplay } from '@/lib/shipment';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/buy-and-ship-for/invoice/[bookingId]/page.jsx — one
-   page for both a 1688 order and a product request. The web picks the body
+   page for both a website order and a product request. The web picks the body
    from `?productRequest=true`; here it is the `kind: 'productRequest'`
    param (a deep link's `productRequest=true` query works too). With neither,
    the id is read as an order, and — beyond the web, for links that lost the
@@ -23,7 +23,7 @@ import { statusDisplay } from '@/lib/shipment';
 /* toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) → "04 Nov 2026" */
 const fmtDate = (ms) => (ms ? enBDDate(ms) : '');
 
-/* ── 1688 order — one line per SKU ── */
+/* ── website order — one line per SKU ── */
 function OrderInvoiceBody({ order }) {
   const totalPaid = getTotalPaid(order);
   const totalDue = getTotalDue(order);

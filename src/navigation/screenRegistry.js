@@ -36,6 +36,7 @@ import Refunds from '@/screens/dashboard/Refunds';
 import Points from '@/screens/dashboard/Points';
 import UserInformation from '@/screens/dashboard/UserInformation';
 import UserSecurity from '@/screens/dashboard/UserSecurity';
+import Notifications from '@/screens/dashboard/Notifications';
 
 import ShipForMeForm from '@/screens/services/ShipForMeForm';
 import BuyForMe from '@/screens/services/BuyForMe';
@@ -70,6 +71,7 @@ export const SCREENS = {
   BuyShipRequestDetail, BuyShipDelivered, BuyShipForwarding, ShipMyRequests,
   ShipRequestDetail, ShipDelivered, ShipForwarding, ShipmentInvoice,
   OrderInvoice, Refunds, Points, UserInformation, UserSecurity,
+  Notifications,
 
   ShipForMeForm, BuyForMe, TrackOrder, CostCalculator, Notices, NoticeDetail,
   More, PaymentReturn,

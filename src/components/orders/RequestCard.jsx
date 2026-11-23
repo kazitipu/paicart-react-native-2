@@ -12,7 +12,12 @@ import {
   SoftPill, RequestStatusBadge, RequestPaymentBadge, PanelToggle,
 } from '@/components/requests/RequestBits';
 import { getSingleShopTotal, getTotalPaid, getTotalDue, canPayBooking } from '@/lib/requestMath';
-import { refundMode, showRefundBlock, bookAgainId } from '@/lib/refund';
+import { refundMode, showRefundBlock, bookAgainId, refundedAmount } from '@/lib/refund';
+import { derivePaymentState } from '@/lib/paymentState';
+import { trackingNumbersOf } from '@/lib/cartons';
+import { cartonHint } from '@/components/shipping/CartonBreakdown';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
 import { isRefundGiven } from '@/lib/buckets';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -21,6 +26,18 @@ import { isRefundGiven } from '@/lib/buckets';
    ═══════════════════════════════════════════════════════════════════════ */
 
 const SKY600 = '#0284c7';
+const VIOLET600 = '#7c3aed';
+
+/* Row with the web's violet `tone="refund"` value (text-violet-600); kept
+   local so the shared OrderBits Row stays untouched. */
+function RefundRow({ label, value }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <Text style={[fs(13), { flexShrink: 1, color: C.gray500 }]}>{label}</Text>
+      <Text style={[fs(13), { fontWeight: '700', color: VIOLET600 }]}>{value}</Text>
+    </View>
+  );
+}
 
 /* `bg-gray-50 rounded-xl px-3 py-2.5`: label 10px semibold gray-400, value
    text-sm extrabold gray-800, optional 9px note. */
@@ -72,6 +89,7 @@ function RequestCard({ booking, selected, onToggleSelect, onPayNow, onApplyRefun
   const totalPaid = getTotalPaid(booking);
   const totalDue = getTotalDue(booking);
   const totalBill = totalDue + totalPaid;
+  const refunded = refundedAmount(booking);
   const hasShipping = parseInt(booking.shippingChargeCustomer, 10) > 0;
   const payable = canPayBooking(booking);
 
@@ -127,10 +145,13 @@ function RequestCard({ booking, selected, onToggleSelect, onPayNow, onApplyRefun
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 4, marginTop: 4 }}>
             <Text style={[fs(11), { color: C.gray400 }]}>{booking.date || '__'}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
               <Navigation2 size={10} color={C.gray400} />
-              <Text style={[fs(11), { color: C.gray400 }]}>{booking.trackingNo || '__'}</Text>
+              <Text style={[fs(11), { color: C.gray400, flexShrink: 1 }]}>{trackingNumbersOf(booking).join(', ') || '__'}</Text>
             </View>
+            {!!cartonHint(booking) && (
+              <Text style={[fs(11), { fontWeight: '600', color: C.gray500 }]}>{cartonHint(booking)}</Text>
+            )}
           </View>
         </View>
       </View>
@@ -317,6 +338,13 @@ function RequestCard({ booking, selected, onToggleSelect, onPayNow, onApplyRefun
                   <Text style={[fs('lg'), { fontWeight: '800', color: ORANGE }]}>৳{money(totalDue)}</Text>
                 </View>
               </View>
+              {/* Money returned after the bill was settled */}
+              {refunded > 0 && (
+                <>
+                  <RefundRow label="Refunded to you:" value={`↩ ৳${money(refunded)}`} />
+                  <Row bold label="Net Paid (after refund):" value={`৳${money(totalPaid - refunded)}`} tone="green" />
+                </>
+              )}
 
               {booking.payments?.length > 0 && (
                 <View style={{ paddingTop: 4 }}>
@@ -360,11 +388,6 @@ function RequestCard({ booking, selected, onToggleSelect, onPayNow, onApplyRefun
                       </Text>
                     </Press>
                   )}
-                  {parseInt(booking.refund, 10) > 0 && (
-                    <Text style={[fs(10), { color: C.gray500 }]}>
-                      Refunded: <Text style={{ fontWeight: '700' }}>৳{money(parseInt(booking.refund, 10))}</Text>
-                    </Text>
-                  )}
                 </View>
               )}
 
@@ -390,17 +413,27 @@ function RequestCard({ booking, selected, onToggleSelect, onPayNow, onApplyRefun
         </View>
       )}
 
+      {/* ── Payment request waiting for admin review ── */}
+      {!isRejected && booking.paymentStatus === 'pending' && (
+        <PendingPaymentNotice request={booking.pendingPaymentRequest} style={{ marginHorizontal: 16, marginBottom: 12 }} />
+      )}
+
       {/* ── Remaining balance + actions ── */}
       {!isRejected && (
         <View style={{ borderTopWidth: 1, borderTopColor: C.gray100, paddingHorizontal: 16, paddingVertical: 12, gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={[fs('xs'), { fontWeight: '700', color: C.gray600 }]}>
-              {totalDue > 0 ? 'Remaining Balance Due:' : 'Total Paid:'}
+              {totalDue > 0 ? 'Remaining Balance Due:' : refunded > 0 ? 'Net Paid:' : 'Total Paid:'}
             </Text>
             <Text style={[fs('lg'), { fontWeight: '800', color: totalDue > 0 ? ORANGE : C.green600 }]}>
-              ৳{money(totalDue > 0 ? totalDue : totalPaid)}
+              ৳{money(totalDue > 0 ? totalDue : totalPaid - refunded)}
             </Text>
           </View>
+          {totalDue <= 0 && refunded > 0 && (
+            <Text style={[fs(11), { marginTop: -6, textAlign: 'right', color: C.gray400 }]}>
+              ৳{money(totalPaid)} paid · <Text style={{ fontWeight: '600', color: VIOLET600 }}>৳{money(refunded)} refunded</Text>
+            </Text>
+          )}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Press
@@ -442,10 +475,13 @@ function RequestCard({ booking, selected, onToggleSelect, onPayNow, onApplyRefun
               <OrangeAction Icon={RotateCcw} label=" Book Again" onPress={() => onBookAgain(rebookId)} />
             ) : (
               <View style={{ paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' }}>
-                <RequestPaymentBadge status={booking.paymentStatus} />
+                <RequestPaymentBadge status={derivePaymentState(booking, totalDue)} />
               </View>
             )}
           </View>
+
+          {/* Request Delivery — To Receive only (renders nothing otherwise). */}
+          <DeliveryRequestPanel kind="request" record={booking} />
         </View>
       )}
     </View>

@@ -17,6 +17,11 @@ import {
   fs, OC, Pill, PayBadge, OrderStatusPill, Row, DashedDivider, PriceTag, ItemThumb, IdMethodStrip,
   UnpaidCountdownBanner, orderDate, usDate, money,
 } from '@/components/orders/OrderBits';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
+import { derivePaymentState } from '@/lib/paymentState';
+import { trackingNumbersOf } from '@/lib/cartons';
+import { cartonHint } from '@/components/shipping/CartonBreakdown';
 
 /* ═══════════════════════════════════════════════════════════════════════
    OrderCard of web my-orders/page.jsx, < 640px — every size is the
@@ -76,6 +81,7 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
   const totalPaid = getTotalPaid(order);
   const totalDue = getTotalDue(order);
   const totalBill = totalDue + totalPaid;
+  const refunded = refundedAmount(order);
   const hasShipping = parseInt(order.shippingChargeCustomer, 10) > 0;
   const payable = canPayOrder(order);
   const delivered = isOrderDelivered(order);
@@ -153,10 +159,13 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
             <Text style={[fs(11, S), { color: C.gray400 }]}>
               {orderDate(order)} {order.orderedTime || ''}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
               <Truck size={10} color={C.gray400} />
-              <Text style={[fs(11, S), { color: C.gray400 }]}>{order.trackingNo || '__'}</Text>
+              <Text style={[fs(11, S), { color: C.gray400, flexShrink: 1 }]}>{trackingNumbersOf(order).join(', ') || '__'}</Text>
             </View>
+            {!!cartonHint(order) && (
+              <Text style={[fs(11, S), { fontWeight: '600', color: C.gray500 }]}>{cartonHint(order)}</Text>
+            )}
           </View>
         </View>
       </View>
@@ -378,6 +387,14 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
                 <Text style={[fs('lg', S), { fontWeight: '800', color: ORANGE }]}>৳{money(totalDue)}</Text>
               </View>
             </View>
+            {/* Money returned after the bill was settled — every total above
+                still reads the full amount paid. */}
+            {refunded > 0 && (
+              <>
+                <Row shrink={S} label="Refunded to you:" value={`↩ ৳${money(refunded)}`} tone="refund" />
+                <Row shrink={S} bold label="Net Paid (after refund):" value={`৳${money(totalPaid - refunded)}`} tone="green" />
+              </>
+            )}
 
             {!!order.imageUrl && (
               <View style={{ paddingTop: 4 }}>
@@ -422,7 +439,7 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
                     <Pill shrink={S} color={order.refundStatus === 'rejected' ? 'red' : 'emerald'}>
                       Refund {order.refundStatus}
                     </Pill>
-                    {refundedAmount(order) > 0 && <Refunded amount={refundedAmount(order)} />}
+                    {/* the amount is in the bill rows above */}
                   </>
                 ) : (
                   <Press
@@ -443,7 +460,6 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
                     </Text>
                   </Press>
                 )}
-                {parseInt(order.refund, 10) > 0 && <Refunded amount={parseInt(order.refund, 10)} />}
               </View>
             )}
 
@@ -468,16 +484,27 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
         )}
       </View>
 
+      {/* ── Payment request waiting for admin review ── */}
+      {!cancelled && order.paymentStatus === 'pending' && (
+        <PendingPaymentNotice request={order.pendingPaymentRequest} style={{ marginHorizontal: 16, marginBottom: 12 }} />
+      )}
+
       {/* ── Remaining balance + actions ── */}
       <View style={{ borderTopWidth: 1, borderTopColor: C.gray100, paddingHorizontal: 16, paddingVertical: 12, gap: 10 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={[fs('xs', S), { fontWeight: '700', color: C.gray600 }]}>
-            {totalDue > 0 ? 'Remaining Balance Due:' : 'Total Paid:'}
+            {totalDue > 0 ? 'Remaining Balance Due:' : refunded > 0 ? 'Net Paid:' : 'Total Paid:'}
           </Text>
           <Text style={[fs('lg', S), { fontWeight: '800', color: totalDue > 0 ? ORANGE : C.green600 }]}>
-            ৳{money(totalDue > 0 ? totalDue : totalPaid)}
+            ৳{money(totalDue > 0 ? totalDue : totalPaid - refunded)}
           </Text>
         </View>
+        {totalDue <= 0 && refunded > 0 && (
+          <Text style={[fs(11, S), { marginTop: -6, textAlign: 'right', color: C.gray400 }]}>
+            ৳{money(totalPaid)} paid ·{' '}
+            <Text style={{ fontWeight: '600', color: '#7c3aed' }}>৳{money(refunded)} refunded</Text>
+          </Text>
+        )}
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Press
@@ -518,10 +545,13 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
             <OrangeAction Icon={RotateCcw} label=" Buy Again" onPress={() => onReorder(reorderId)} />
           ) : (
             <View style={{ paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' }}>
-              <PayBadge status={order.paymentStatus} shrink={S} />
+              <PayBadge status={derivePaymentState(order, totalDue)} />
             </View>
           )}
         </View>
+
+        {/* Request Delivery — To Receive only (renders nothing otherwise). */}
+        <DeliveryRequestPanel kind="order" record={order} />
 
         {/* Why this order was cancelled — an auto-cancel is otherwise
             indistinguishable from one our team rejected. */}
@@ -543,7 +573,7 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
               <XCircle size={14} color="#F5222D" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[fs(11, S), { fontWeight: '700', color: '#F5222D' }]}>পেমেন্ট না হওয়ায় অর্ডারটি বাতিল হয়েছে</Text>
+              <Text style={[fs(11, S), { fontWeight: '700', color: '#F5222D' }]}>This order was cancelled because payment was not made</Text>
               <Text style={[fs(10, S), { color: C.gray500 }]}>
                 Cancelled automatically — no payment was received within 72 hours
                 {order.cancelledAt ? ` (${usDate(order.cancelledAt)})` : ''}.
@@ -553,7 +583,8 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
         )}
 
         {/* Buy Again — additive: any delivered order, and any cancelled one. */}
-        {(delivered || cancelled) && (
+        {/* …but not when the action row already shows the reorder link. */}
+        {(delivered || cancelled) && (payable || !reorderId) && (
           <ScalePress
             onPress={() => onBuyAgain(order)}
             style={{
@@ -573,14 +604,6 @@ function MyOrderCard({ order, selected, onToggleSelect, onPayNow, onBuyAgain, on
         )}
       </View>
     </View>
-  );
-}
-
-function Refunded({ amount }) {
-  return (
-    <Text style={[fs(10, S), { color: C.gray500 }]}>
-      Refunded: <Text style={{ fontWeight: '700' }}>৳{money(amount)}</Text>
-    </Text>
   );
 }
 
@@ -638,7 +661,7 @@ export function ShippingNote({ shrink = S }) {
         <Info size={10} color="#ffffff" />
       </View>
       <Text style={[fs(11, shrink, 'relaxed'), { color: C.gray500, flex: 1 }]}>
-        পার্সেল বাংলাদেশে আসার পর প্রকৃত ওজন (Actual Weight) মেপে শিপিং চার্জ হিসাব করা হবে।
+        Shipping charge will be calculated from the actual weight once the parcel arrives in Bangladesh.
       </Text>
     </View>
   );

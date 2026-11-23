@@ -21,6 +21,7 @@ import { setJSON, KEYS } from '@/lib/storage';
 import { toast } from '@/lib/toast';
 import { TABS } from '@/navigation/routes';
 import { goHome } from '@/navigation/goHome';
+import { BulkDeliveryButton } from '@/components/orders/BulkDeliveryRequest';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/buy-and-ship-for-me/my-orders/page.jsx at < 640px.
@@ -32,6 +33,20 @@ import { goHome } from '@/navigation/goHome';
    ═══════════════════════════════════════════════════════════════════════ */
 
 const S = true;
+
+/* Order ID, shop, tracking number or product name */
+const matchesSearch = (order, query) => {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return true;
+  return (
+    String(order.orderId || '').toLowerCase().includes(q) ||
+    (order.shopName || '').toLowerCase().includes(q) ||
+    String(order.trackingNo || '').toLowerCase().includes(q) ||
+    !!order.items?.some(
+      (item) => (item.name || '').toLowerCase().includes(q) || (item.productType || '').toLowerCase().includes(q),
+    )
+  );
+};
 const BODY = '#1e293b';
 const PLACEHOLDER = 'rgba(30,41,59,0.5)';
 
@@ -271,18 +286,7 @@ export default function BuyShipMyOrders() {
     if (filterPay === 'Partially Paid') list = list.filter((o) => o.paymentStatus === 'Partially Paid');
     if (filterPay === 'unpaid') list = list.filter((o) => !o.paymentStatus || o.paymentStatus === 'purchaseLater');
     if (filterPay === 'pending') list = list.filter((o) => o.paymentStatus === 'pending');
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (o) =>
-          String(o.orderId || '').toLowerCase().includes(q) ||
-          (o.shopName || '').toLowerCase().includes(q) ||
-          (o.trackingNo || '').toLowerCase().includes(q) ||
-          o.items?.some(
-            (item) => (item.name || '').toLowerCase().includes(q) || (item.productType || '').toLowerCase().includes(q),
-          ),
-      );
-    }
+    if (searchQuery.trim()) list = list.filter((o) => matchesSearch(o, searchQuery));
     if (dateFilter) {
       const now = Date.now();
       const startOfToday = new Date().setHours(0, 0, 0, 0);
@@ -300,6 +304,38 @@ export default function BuyShipMyOrders() {
     }
     return [...list].sort((a, b) => (b.time || 0) - (a.time || 0));
   }, [orders, activeTab, filterPay, searchQuery, dateFilter]);
+
+  /* Searching only looked inside the open tab, so an order sitting in another
+     tab read as "No orders found". On submit — or as soon as an exact Order ID
+     is typed — jump to the tab that holds the match. An exact Order ID wins
+     over a partial match; stage tabs win over the cross-cutting Refunds tab. */
+  const jumpToMatchingTab = (query, { quiet = false } = {}) => {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return;
+    if (orders.some((o) => matchesTab(o, activeTab) && matchesSearch(o, q))) return;
+    const exact = orders.find((o) => String(o.orderId || '').toLowerCase() === q);
+    const target = exact || orders.find((o) => matchesSearch(o, q));
+    if (!target) {
+      if (!quiet) toast.error('No order matches that search.');
+      return;
+    }
+    const tab =
+      STATUS_TABS.find((t) => t !== 'All' && t !== 'Refunds' && matchesTab(target, t)) ||
+      (matchesTab(target, 'Refunds') ? 'Refunds' : 'All');
+    setActiveTab(tab);
+    /* the date / payment pickers could still hide it */
+    setFilterPay('');
+    setDateFilter('');
+    if (!quiet) toast.success(`Found in ${tab === 'All' ? 'All orders' : `the ${tab} tab`}`);
+  };
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && orders.some((o) => String(o.orderId || '').toLowerCase() === q)) {
+      jumpToMatchingTab(q, { quiet: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, orders]);
 
   const tabCounts = useMemo(
     () =>
@@ -580,6 +616,7 @@ export default function BuyShipMyOrders() {
               autoCorrect={false}
               autoCapitalize="none"
               returnKeyType="search"
+              onSubmitEditing={(e) => jumpToMatchingTab(e.nativeEvent.text)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
               style={[
@@ -607,6 +644,7 @@ export default function BuyShipMyOrders() {
         <View style={{ marginTop: 12, marginBottom: 12 }}>
           <StatusTabs value={activeTab} counts={tabCounts} onChange={setActiveTab} />
         </View>
+        {activeTab === 'To Receive' && <BulkDeliveryButton style={{ marginBottom: 12 }} />}
       </DashboardLayout>
 
       <OrderPaymentModal

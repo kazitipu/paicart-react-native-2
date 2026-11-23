@@ -13,6 +13,8 @@ import { isRefundGiven } from '@/lib/buckets';
 import { ROUTES } from '@/navigation/routes';
 import colors from '@/theme/colors';
 import useNow from '@/lib/useNow';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import { derivePaymentState } from '@/lib/paymentState';
 
 /* Live countdown on an order still inside its 72-hour unpaid window. */
 function UnpaidCountdown({ order }) {
@@ -26,7 +28,7 @@ function UnpaidCountdown({ order }) {
     <View className="flex-row items-center gap-1.5 rounded-lg bg-amber-soft border border-amber-line px-2.5 py-1.5 mt-2">
       <Clock size={12} color="#8a5a06" />
       <Text className="text-2xs text-amber-900 flex-1">
-        পেমেন্ট বাকি — {formatCountdown(ms)} বাকি আছে
+        Payment pending — {formatCountdown(ms)} left
       </Text>
     </View>
   );
@@ -81,7 +83,7 @@ export default function OrderCard({
           <Text className="text-smd font-bold text-foreground">#{order.orderId}</Text>
           <CopyIdButton value={order.orderId} />
           <View className="flex-1" />
-          <PaymentBadge status={order.paymentStatus} />
+          <PaymentBadge status={derivePaymentState(order, getTotalDue(order))} />
         </View>
 
         <View className="flex-row items-center gap-2 mt-1.5">
@@ -187,6 +189,11 @@ export default function OrderCard({
           </Collapsible>
         )}
       </View>
+
+      {/* Payment request waiting for admin review */}
+      {!isCancelled(order) && order.paymentStatus === 'pending' && (
+        <PendingPaymentNotice request={order.pendingPaymentRequest} style={{ marginHorizontal: 12, marginBottom: 10 }} />
+      )}
 
       {/* Actions */}
       <View className="flex-row flex-wrap gap-2 px-3 py-2.5 border-t border-gray-100">

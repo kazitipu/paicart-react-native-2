@@ -1,6 +1,7 @@
 import React from 'react';
 import SoftPill from './SoftPill';
 import { READY_STATUS, READY_SEA_LABEL, isSeaShipment } from '@/lib/shipment';
+import PaymentStateBadge from '@/components/ui/PaymentStateBadge';
 
 /* `READY_STATUS` ('Ready for fly') is a literal value written by the admin
    panel — the key must not be renamed, only what the customer reads changes,
@@ -29,11 +30,9 @@ export function StatusBadge({ status, req }) {
   );
 }
 
+/* Delegates to the redesigned badge; callers should pass derivePaymentState() */
 export function PaymentBadge({ status }) {
-  const val = status || 'Not Paid';
-  if (val === 'Paid') return <SoftPill color="emerald">✓ Paid</SoftPill>;
-  if (val === 'Partially Paid') return <SoftPill color="amber">◑ Partial</SoftPill>;
-  return <SoftPill color="gray">✕ Unpaid</SoftPill>;
+  return <PaymentStateBadge status={status} />;
 }
 
 export default StatusBadge;

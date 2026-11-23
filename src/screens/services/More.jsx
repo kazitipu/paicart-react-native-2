@@ -21,7 +21,7 @@ import {
   Ship, Package, MapPin, ListOrdered, Calculator, Bell, Info, Phone,
   HelpCircle, Shield, RotateCcw, FileText, Percent, ChevronRight,
   LogIn, Mail, Heart, Award, Wallet, User, ShoppingBag, ShoppingCart,
-  LogOut, Copy, Sparkles, KeyRound, Truck,
+  LogOut, Copy, Sparkles, KeyRound, Truck, BellRing,
 } from 'lucide-react-native';
 import { CONTACT, whatsappUrl } from '@/data/contact';
 import Avatar from '@/components/Avatar';
@@ -32,6 +32,7 @@ import { toast } from '@/lib/toast';
 import { TABS } from '@/navigation/routes';
 import pkg from '../../../package.json';
 import { decorRing } from '@/lib/decorClock';
+import useNotifications from '@/lib/useNotifications';
 
 const LOGO = require('@/assets/paicart_transparent.png');
 const ORANGE = '#FF6A00';
@@ -50,6 +51,7 @@ const SERVICES = [
 ];
 
 const ACCOUNT = [
+  { label: 'Notifications', tab: TABS.ORDERS, screen: 'Notifications', Icon: BellRing, color: '#E11D48', badge: 'notifications' },
   { label: 'My Orders', tab: TABS.ORDERS, screen: 'BuyShipMyOrders', Icon: ShoppingBag, color: '#FF6A00' },
   { label: 'My Shipments', tab: TABS.ORDERS, screen: 'ShipMyRequests', Icon: Truck, color: '#1677FF' },
   { label: 'Points & Level', tab: TABS.ORDERS, screen: 'Points', Icon: Award, color: '#F59E0B' },
@@ -228,6 +230,7 @@ export default function More() {
   const level = getLevelMeta(lvl);
   const { fraction, pointsToNext, next } = getLevelProgress(points);
 
+  const { unreadCount } = useNotifications();
   const go = (screen) => navigation.navigate(screen);
   const goTab = (tab, screen) => navigation.navigate(tab, { screen });
   const needLogin = (fn) => () => (isLoggedIn ? fn() : navigation.navigate('Login'));
@@ -393,6 +396,7 @@ export default function More() {
                   color={a.color}
                   label={a.label}
                   onPress={needLogin(() => goTab(a.tab, a.screen))}
+                  value={a.badge === 'notifications' && unreadCount > 0 ? `${unreadCount > 99 ? '99+' : unreadCount} new` : undefined}
                   last={i === ACCOUNT.length - 1}
                 />
               ))}

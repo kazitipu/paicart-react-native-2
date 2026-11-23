@@ -16,6 +16,8 @@ import { getAllBookingsOfSingleUserRedux } from '@/store/actions';
 import { refundMode } from '@/lib/refund';
 import { getRequestBucket } from '@/lib/buckets';
 import { canPayBooking, getTotalDue } from '@/lib/requestMath';
+import { toast } from '@/lib/toast';
+import { BulkDeliveryButton } from '@/components/orders/BulkDeliveryRequest';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/buy-and-ship-for-me/my-request/page.jsx at < 640px.
@@ -28,6 +30,13 @@ import { canPayBooking, getTotalDue } from '@/lib/requestMath';
 /* Same pipeline as My Orders (1688), with Pending → Approved in front while
    the price is agreed. Rules: lib/buckets.js getRequestBucket. */
 const STATUS_TABS = ['All', 'Pending', 'Approved', 'To Ship', 'In Shipment', 'To Receive', 'Delivered', 'Refunds', 'Rejected'];
+/* Booking ID, tracking number and the fields the search box lists */
+const matchesSearch = (r, query) => {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return true;
+  return [r.bookingId, r.trackingNo, r.date, r.productType].some((v) => String(v || '').toLowerCase().includes(q));
+};
+
 const matchesTab = (booking, tab) => {
   if (tab === 'All') return true;
   /* Cross-cutting flag, not a stage — same as the My Orders Refunds tab */
@@ -224,6 +233,35 @@ export default function BuyShipMyRequests() {
     });
   }, []);
 
+  /* Search used to look only inside the open tab. On submit — or as soon as
+     an exact Booking ID is typed — jump to the tab that holds the match (same
+     behaviour as My Orders). Stage tabs win over the cross-cutting Refunds. */
+  const jumpToMatchingTab = (query, { quiet = false } = {}) => {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return;
+    if (requests.some((r) => matchesTab(r, activeTab) && matchesSearch(r, q))) return;
+    const exact = requests.find((r) => String(r.bookingId || '').toLowerCase() === q);
+    const target = exact || requests.find((r) => matchesSearch(r, q));
+    if (!target) {
+      if (!quiet) toast.error('No request matches that search.');
+      return;
+    }
+    const tab =
+      STATUS_TABS.find((t) => t !== 'All' && t !== 'Refunds' && matchesTab(target, t)) ||
+      (STATUS_TABS.includes('Refunds') && matchesTab(target, 'Refunds') ? 'Refunds' : 'All');
+    setActiveTab(tab);
+    setDateFilter(''); /* the date filter could still hide it */
+    if (!quiet) toast.success(`Found in ${tab === 'All' ? 'All' : `the ${tab} tab`}`);
+  };
+
+  useEffect(() => {
+    const q = search.trim().toLowerCase();
+    if (q && requests.some((r) => String(r.bookingId || '').toLowerCase() === q)) {
+      jumpToMatchingTab(q, { quiet: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, requests]);
+
   const tabCounts = useMemo(
     () =>
       Object.fromEntries(
@@ -234,16 +272,7 @@ export default function BuyShipMyRequests() {
 
   const filtered = useMemo(() => {
     let list = requests.filter((b) => matchesTab(b, activeTab));
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (b) =>
-          String(b.bookingId || '').toLowerCase().includes(q) ||
-          String(b.trackingNo || '').toLowerCase().includes(q) ||
-          String(b.date || '').toLowerCase().includes(q) ||
-          String(b.productType || '').toLowerCase().includes(q),
-      );
-    }
+    if (search.trim()) list = list.filter((r) => matchesSearch(r, search));
     if (dateFilter) {
       const now = Date.now();
       const startOfToday = new Date().setHours(0, 0, 0, 0);
@@ -518,6 +547,7 @@ export default function BuyShipMyRequests() {
                   autoCorrect={false}
                   autoCapitalize="none"
                   returnKeyType="search"
+                  onSubmitEditing={(e) => jumpToMatchingTab(e?.nativeEvent?.text ?? search)}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
                   style={[
@@ -539,6 +569,7 @@ export default function BuyShipMyRequests() {
 
           {/* Status tabs */}
           {requests.length > 0 && <StatusPills value={activeTab} counts={tabCounts} onChange={setActiveTab} />}
+          {activeTab === 'To Receive' && <BulkDeliveryButton />}
         </View>
       </DashboardLayout>
 

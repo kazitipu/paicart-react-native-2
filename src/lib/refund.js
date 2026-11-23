@@ -1,5 +1,5 @@
 /* When a customer may apply for a refund, and which of the admin's two
- * queues the request belongs in. Shared by the 1688 order screens and the
+ * queues the request belongs in. Shared by the website order screens and the
  * product-request screens so the four entry points cannot drift apart.
  *
  * The admin splits `refundRequest` by the `quickRefund` boolean — see the

@@ -113,3 +113,39 @@ export const getShipBucket = (req) => {
 
 export const ORDER_BUCKETS = ['To Pay', 'To Ship', 'In Shipment', 'To Receive', 'Delivered', 'Refunded', 'Rejected'];
 export const SHIP_BUCKETS  = ['Pending', 'Approved', 'In Shipment', 'To Receive', 'Delivered', 'Rejected'];
+
+/* ── Ship For Me: auto-reject when the parcel never reached the abroad warehouse ──
+   A booking is valid for 7 days (`validTo`, "d-m-yyyy"). If the warehouse
+   hasn't received the parcel (shipmentStatusScore < 3) by the end of that
+   day, the booking is rejected automatically. Used by the daily Cloud
+   Function (functions/index.js) and the customer's list page sweep.
+
+   Only bookings whose valid date is on/after SHIP_AUTO_REJECT_FROM are
+   affected — the rule went live on that date, and older expired bookings are
+   left for admins to handle by hand. Bookings with any payment recorded or a
+   payment under review are never auto-rejected. */
+export const SHIP_AUTO_REJECT_FROM = '2026-11-22';
+export const SHIP_AUTO_REJECT_REASON = 'not-received-by-valid-date';
+
+const DHAKA_OFFSET_MS = 6 * 60 * 60 * 1000; // UTC+6, no DST
+
+/* End of the valid day in Dhaka, as epoch ms; null if validTo is unreadable */
+export const shipValidUntil = (req) => {
+  const [d, m, y] = String(req?.validTo || '').split('-').map(Number);
+  if (!d || !m || !y) return null;
+  return Date.UTC(y, m - 1, d, 23, 59, 59, 999) - DHAKA_OFFSET_MS;
+};
+
+export const isShipBookingExpired = (req, now = Date.now()) => {
+  if (!req) return false;
+  const status = req.status || 'Pending';
+  if (status !== 'Pending' && status !== 'Rates Provided') return false;
+  if ((parseInt(req.shipmentStatusScore) || 1) >= 3) return false;
+  if (req.paymentRequested) return false;
+  if ((req.payments || []).some((p) => (parseInt(p?.amount) || 0) > 0)) return false;
+  const until = shipValidUntil(req);
+  if (until === null) return false;
+  const [fy, fm, fd] = SHIP_AUTO_REJECT_FROM.split('-').map(Number);
+  if (until < Date.UTC(fy, fm - 1, fd) - DHAKA_OFFSET_MS) return false;
+  return now > until;
+};

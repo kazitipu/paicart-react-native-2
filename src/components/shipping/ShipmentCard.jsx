@@ -10,11 +10,17 @@ import ProductImage from '@/components/ui/ProductImage';
 import { C, ORANGE, Press, ScalePress, Spinner } from '@/components/product/ui';
 import { canPayShipment } from '@/lib/shipForMe';
 import { refundDeadline, refundedAmount } from '@/lib/refund';
+import { derivePaymentState, shipmentDue } from '@/lib/paymentState';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import AutoRejectedNotice from '@/components/shipping/AutoRejectedNotice';
+import { cartonHint } from '@/components/shipping/CartonBreakdown';
+import { trackingNumbersOf, groupCartonsByTracking } from '@/lib/cartons';
 import {
   sf, SC, CONTAINS_STYLE, SoftPill, StatusBadge, PaymentBadge, Collapsible, ShipmentProgressVertical,
   toIsoDate, estimateDeliveryDate, shipMethodOf, statusLabelOf, num,
 } from '@/components/shipping/ShipBits';
 import useNow from '@/lib/useNow';
+import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
 
 /* ═══════════════════════════════════════════════════════════════════════
    RequestCard of web ship-for-me/my-request/page.jsx, < 640px, with the
@@ -80,7 +86,6 @@ function ShippingBillSection({ req, onPayNow, onInvoice, canPayNow }) {
               ),
             })}
           {otherCost > 0 && row('Repacking Charge', `+ ${otherCost.toLocaleString()} BDT`)}
-          {refund > 0 && row('Refund', `− ${refund.toLocaleString()} BDT`, { valueColor: SC.emerald600 })}
           {discount > 0 && row('Discount', `− ${discount.toLocaleString()} BDT`, { labelColor: SC.emerald600, valueColor: SC.emerald600 })}
           <View
             style={{
@@ -96,7 +101,14 @@ function ShippingBillSection({ req, onPayNow, onInvoice, canPayNow }) {
             <Text style={[sf('xs'), { fontWeight: '800', color: C.gray900 }]}>Total Due Bill:</Text>
             <Text style={[sf('base'), { fontWeight: '800', color: ORANGE, flexShrink: 0 }]}>{num(req.shippingChargeCustomer)} BDT</Text>
           </View>
+          {/* Money returned after the bill — listing it above as a deduction
+              made the total look wrong, since the bill itself never changes. */}
+          {refund > 0 && row('Refunded to you', `↩ ${refund.toLocaleString()} BDT`, { valueColor: '#7c3aed' })}
         </Animated.View>
+      )}
+
+      {req.paymentRequested && req.paymentStatus !== 'Paid' && (
+        <PendingPaymentNotice request={req.pendingPaymentRequest} style={{ marginTop: 12 }} />
       )}
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 }}>
@@ -264,13 +276,22 @@ function ShipmentCard({ req, selected, onToggleSelect, onEdit, onStartShipping, 
   const isDelivered = score >= 7 || req.status === 'Delivered';
   const statusLabel = statusLabelOf(req);
 
-  const trackingList = req.trackingNumbers?.length
-    ? req.trackingNumbers
-    : String(req.trackingNo || '')
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
+  const cartonGroups = groupCartonsByTracking(Array.isArray(req.cartons) ? req.cartons.filter(Boolean) : [], trackingNumbersOf(req));
+  const trackingList = cartonGroups.map((g) => g.trackingNo).filter(Boolean);
+  const groupHint = (t) => {
+    const g = cartonGroups.find((x) => x.trackingNo === t);
+    return g ? cartonHint({ cartons: g.cartons }) : null;
+  };
   const ctnList = Array.isArray(req.ctnNo) ? req.ctnNo : req.ctnNo ? [req.ctnNo] : [];
+  /* every carton number under its tracking number: from the carton list when
+     the admin has it, else the legacy ctnNo list (all of it when there is only
+     one tracking number) */
+  const cartonNumbersOf = (t, i) => {
+    const g = cartonGroups.find((x) => x.trackingNo === t);
+    if (g && g.cartons.length) return g.cartons.map((c, k) => c.cartonNo || `#${k + 1}`);
+    if (trackingList.length === 1) return ctnList;
+    return ctnList[i] ? [ctnList[i]] : [];
+  };
   const [showAllTracking, setShowAllTracking] = useState(false);
   const visibleTracking = showAllTracking ? trackingList : trackingList.slice(0, 2);
 
@@ -282,11 +303,10 @@ function ShipmentCard({ req, selected, onToggleSelect, onEdit, onStartShipping, 
   const stats = [
     { label: 'Total Box', value: req.ctnQuantity || '—' },
     { label: 'Total CBM', value: req.totalCbm ? `${req.totalCbm} cbm` : '—' },
-    {
-      label: 'Actual WT',
-      value: req.receivedWeight ? `${req.receivedWeight} Kg` : req.weight ? `${req.weight} Kg` : 'Pending',
-      pending: !req.receivedWeight,
-    },
+    /* the customer's estimate (Est. WT) until the warehouse records the actual weight */
+    req.receivedWeight
+      ? { label: 'Actual WT', value: `${req.receivedWeight} Kg` }
+      : { label: 'Est. WT', value: parseFloat(req.weight) > 0 ? `${req.weight} Kg` : '—', pending: true },
   ];
 
   return (
@@ -360,7 +380,7 @@ function ShipmentCard({ req, selected, onToggleSelect, onEdit, onStartShipping, 
         </View>
         <View style={{ alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
           <StatusBadge status={req.status} req={req} />
-          <PaymentBadge status={req.paymentStatus} />
+          <PaymentBadge status={derivePaymentState(req, shipmentDue(req))} />
         </View>
       </View>
 
@@ -435,43 +455,47 @@ function ShipmentCard({ req, selected, onToggleSelect, onEdit, onStartShipping, 
         {trackingList.length > 0 && (
           <Collapsible Icon={Navigation2} title="Tracking and Carton Details">
             <View style={{ gap: 8 }}>
-              {visibleTracking.map((t, i) => (
-                <View
-                  key={i}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                    backgroundColor: C.gray50,
-                    borderRadius: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                  }}
-                >
-                  <View style={{ flexShrink: 1 }}>
-                    <Text style={[sf(9), { color: C.gray400, textTransform: 'uppercase', letterSpacing: 0.2 }]}>Tracking Number</Text>
-                    <Text style={[sf('xs'), { fontWeight: '700', color: C.gray800 }]}>{t}</Text>
-                  </View>
-                  {!!ctnList[i] && (
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={[sf(9), { color: C.gray400, textTransform: 'uppercase', letterSpacing: 0.2 }]}>Carton Number</Text>
-                      <View
-                        style={{
-                          backgroundColor: SC.orange50,
-                          borderWidth: 1,
-                          borderColor: SC.orange200,
-                          paddingHorizontal: 8,
-                          paddingVertical: 2,
-                          borderRadius: 6,
-                        }}
-                      >
-                        <Text style={[sf(11), { fontWeight: '700', color: ORANGE }]}>{ctnList[i]}</Text>
-                      </View>
+              {visibleTracking.map((t, i) => {
+                const ctns = cartonNumbersOf(t, i);
+                return (
+                  <View
+                    key={i}
+                    style={{ backgroundColor: C.gray50, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }}
+                  >
+                    <View style={{ flexShrink: 1 }}>
+                      <Text style={[sf(9), { color: C.gray400, textTransform: 'uppercase', letterSpacing: 0.2 }]}>Tracking Number</Text>
+                      <Text style={[sf('xs'), { fontWeight: '700', color: C.gray800 }]}>{t}</Text>
+                      {!!groupHint(t) && (
+                        <Text style={[sf(10), { fontWeight: '600', color: SC.teal600 }]}>{groupHint(t)}</Text>
+                      )}
                     </View>
-                  )}
-                </View>
-              ))}
+                    {ctns.length > 0 && (
+                      <View style={{ marginTop: 6 }}>
+                        <Text style={[sf(9), { color: C.gray400, textTransform: 'uppercase', letterSpacing: 0.2 }]}>
+                          {ctns.length > 1 ? `Carton Numbers (${ctns.length})` : 'Carton Number'}
+                        </Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                          {ctns.map((c, k) => (
+                            <View
+                              key={k}
+                              style={{
+                                backgroundColor: SC.orange50,
+                                borderWidth: 1,
+                                borderColor: SC.orange200,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                borderRadius: 6,
+                              }}
+                            >
+                              <Text style={[sf(11), { fontWeight: '700', color: ORANGE }]}>{c}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
             </View>
             {trackingList.length > 2 && (
               <Press
@@ -494,6 +518,8 @@ function ShipmentCard({ req, selected, onToggleSelect, onEdit, onStartShipping, 
             )}
           </Collapsible>
         )}
+
+        <AutoRejectedNotice req={req} />
 
         {/* 3-stat row */}
         <View
@@ -539,6 +565,9 @@ function ShipmentCard({ req, selected, onToggleSelect, onEdit, onStartShipping, 
         {isDelivered && <RefundClaimSection req={req} onClaim={onRefundClaim} />}
 
         {hasCharge && <ShippingBillSection req={req} onPayNow={onPayNow} onInvoice={onInvoice} canPayNow={canPayNow} />}
+
+        {/* Request Delivery — To Receive only (renders nothing otherwise). */}
+        <DeliveryRequestPanel kind="ship" record={req} style={{ marginTop: 12 }} />
 
         {/* Actions row — View details last */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 }}>

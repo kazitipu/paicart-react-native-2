@@ -17,8 +17,12 @@ import { C, SHADOW, ORANGE, Press, ScalePress, Spinner } from '@/components/prod
 import { getAllShipForMeOfSingleUserRedux, updateShipForMeRedux, updateShipmentRequestRedux } from '@/store/actions';
 import { canPayShipment } from '@/lib/shipForMe';
 import { matchShipTab } from '@/lib/shipment';
+import { isShipBookingExpired } from '@/lib/buckets';
+import { algHasReceived, orderTrackingNumbers } from '@/lib/algOrderStatus';
+import { autoRejectShipForMeApi } from '@/lib/firebaseUtils';
 import { toast } from '@/lib/toast';
 import { TABS } from '@/navigation/routes';
+import { BulkDeliveryButton } from '@/components/orders/BulkDeliveryRequest';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/ship-for-me/my-request/page.jsx at < 640px.
@@ -33,6 +37,27 @@ import { TABS } from '@/navigation/routes';
 /* The web's STATUS_TABS and matchShipTab: the bucket rules the Cloud Function
    stamps for the dashboard counts, so a stat card's number matches its tab. */
 const STATUS_TABS = ['All', 'Pending', 'Approved', 'In Shipment', 'To Receive', 'Delivered', 'Rejected'];
+
+/* true when ALG has received any of the booking's parcels — such a booking
+   is never auto-rejected (the status sync moves it on instead) */
+const reachedAlg = async (booking) => {
+  const answers = await Promise.all(
+    orderTrackingNumbers(booking).map((t) =>
+      fetch(`https://alglimited.com/api/v1/orderTracking-alg/${encodeURIComponent(t)}`)
+        .then((r) => (r.ok ? r.text() : ''))
+        .then((txt) => [t, txt ? JSON.parse(txt) : null])
+        .catch(() => [t, null]),
+    ),
+  );
+  return algHasReceived(Object.fromEntries(answers));
+};
+
+/* Booking ID, tracking number and the fields the search box lists */
+const matchesSearch = (r, query) => {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return true;
+  return [r.othersProductName, r.bookingId, r.status, r.trackingNo].some((v) => String(v || '').toLowerCase().includes(q));
+};
 
 const BODY = '#1e293b';
 const PLACEHOLDER = 'rgba(30,41,59,0.5)';
@@ -152,6 +177,24 @@ export default function ShipMyRequests() {
     refreshRequests().finally(() => setLoaded(true));
   }, [refreshRequests]);
 
+  /* Auto-reject sweep: a booking whose parcel never reached the abroad
+     warehouse by its Valid To date is rejected (rule in lib/buckets.js). A
+     daily Cloud Function does this server-side too; this catches it up as
+     soon as the customer opens the list. */
+  useEffect(() => {
+    const expired = requests.filter((r) => isShipBookingExpired(r));
+    if (!expired.length) return;
+    (async () => {
+      let rejected = 0;
+      for (const r of expired) {
+        if (await reachedAlg(r)) continue;
+        await autoRejectShipForMeApi(r.bookingId);
+        rejected += 1;
+      }
+      if (rejected) refreshRequests();
+    })();
+  }, [requests, refreshRequests]);
+
   const onRefresh = () => {
     setRefreshing(true);
     refreshRequests().finally(() => setRefreshing(false));
@@ -205,6 +248,35 @@ export default function ShipMyRequests() {
     setStartSubmitting(false);
   };
 
+  /* Search used to look only inside the open tab. On submit — or as soon as an
+     exact Booking ID is typed — jump to the tab that holds the match (same
+     behaviour as My Orders). Stage tabs win over the cross-cutting Refunds. */
+  const jumpToMatchingTab = (query, { quiet = false } = {}) => {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return;
+    if (requests.some((r) => matchShipTab(r, activeTab) && matchesSearch(r, q))) return;
+    const exact = requests.find((r) => String(r.bookingId || '').toLowerCase() === q);
+    const target = exact || requests.find((r) => matchesSearch(r, q));
+    if (!target) {
+      if (!quiet) toast.error('No request matches that search.');
+      return;
+    }
+    const tab =
+      STATUS_TABS.find((t) => t !== 'All' && t !== 'Refunds' && matchShipTab(target, t)) ||
+      (STATUS_TABS.includes('Refunds') && matchShipTab(target, 'Refunds') ? 'Refunds' : 'All');
+    setActiveTab(tab);
+    setDateFilter(''); /* the date picker could still hide it */
+    if (!quiet) toast.success(`Found in ${tab === 'All' ? 'All' : `the ${tab} tab`}`);
+  };
+
+  useEffect(() => {
+    const q = search.trim().toLowerCase();
+    if (q && requests.some((r) => String(r.bookingId || '').toLowerCase() === q)) {
+      jumpToMatchingTab(q, { quiet: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, requests]);
+
   const tabCounts = useMemo(
     () =>
       Object.fromEntries(STATUS_TABS.map((t) => [t, t === 'All' ? requests.length : requests.filter((r) => matchShipTab(r, t)).length])),
@@ -213,16 +285,7 @@ export default function ShipMyRequests() {
 
   const filtered = useMemo(() => {
     let list = requests.filter((r) => matchShipTab(r, activeTab));
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (r) =>
-          String(r.othersProductName || '').toLowerCase().includes(q) ||
-          String(r.bookingId || '').toLowerCase().includes(q) ||
-          String(r.status || '').toLowerCase().includes(q) ||
-          String(r.trackingNo || '').toLowerCase().includes(q),
-      );
-    }
+    if (search.trim()) list = list.filter((r) => matchesSearch(r, search));
     if (dateFilter) {
       const now = Date.now();
       const startOfToday = new Date().setHours(0, 0, 0, 0);
@@ -497,6 +560,7 @@ export default function ShipMyRequests() {
                   autoCorrect={false}
                   autoCapitalize="none"
                   returnKeyType="search"
+                  onSubmitEditing={(e) => jumpToMatchingTab(e.nativeEvent?.text ?? search)}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
                   style={[sf('sm'), { height: '100%', paddingVertical: 0, paddingLeft: 36, paddingRight: 16, color: BODY, includeFontPadding: false }]}
@@ -528,6 +592,7 @@ export default function ShipMyRequests() {
 
           {/* Status tabs */}
           {requests.length > 0 && <StatusPills value={activeTab} counts={tabCounts} onChange={setActiveTab} />}
+          {activeTab === 'To Receive' && <BulkDeliveryButton />}
 
           {/* Pending edit reminder */}
           {requests.some((r) => !r.status || r.status === 'Pending') && (

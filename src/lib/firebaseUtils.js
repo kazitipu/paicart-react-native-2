@@ -18,6 +18,7 @@ import {
   orderBy,
   limit,
   writeBatch,
+  onSnapshot,
 } from '@react-native-firebase/firestore';
 import { ref, putFile, getDownloadURL } from '@react-native-firebase/storage';
 import { toast } from './toast';
@@ -389,22 +390,97 @@ export const getAllOrdersApi = async (userId) => {
   const ordersCollectionRef = collection(firestore, 'ordersApi');
   const q = query(ordersCollectionRef, where('userId', '==', userId));
   try {
-    const orders = await getDocs(q);
+    const [orders, pendingByOrder] = await Promise.all([
+      getDocs(q),
+      getPendingOrderPaymentsByOrder(userId),
+    ]);
     const ordersArray = [];
-    orders.forEach((d) => { ordersArray.push(d.data()); });
+    orders.forEach((d) => {
+      const order = d.data();
+      const pending = order.paymentStatus === 'pending' && pendingByOrder[order.orderId];
+      ordersArray.push(pending ? { ...order, pendingPaymentRequest: pending } : order);
+    });
     return ordersArray.sort((a, b) => b.time - a.time);
   } catch (error) {
     console.error(error);
   }
 };
 
+/* The customer's product-request payments still waiting for admin review,
+   keyed by bookingId, so a booking can show which screenshot / amount it is
+   waiting on. Best-effort: the bookings list must still load if this fails. */
+/* Product requests are paid through paymentRequestApi; Ship For Me bookings
+   through paymentRequest. Both list the bookings in productRequestArray. */
+const getPendingPaymentsByBooking = async (userId, collectionName, accept = () => true) => {
+  const byBooking = {};
+  try {
+    const q = query(collection(firestore, collectionName), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    snap.forEach((d) => {
+      const r = d.data();
+      if (r.status !== 'pending' || !accept(r)) return;
+      const summary = {
+        paymentId: String(r.paymentId || d.id),
+        imageUrl: r.imageUrl || '',
+        amount: r.payableTotal || r.amount || 0,
+        method: r.method || '',
+        date: r.date || '',
+        time: r.time || 0,
+      };
+      (r.productRequestArray || r.pendingOrders || []).forEach((b) => {
+        const id = b && (b.bookingId || b.orderId);
+        if (!id) return;
+        const prev = byBooking[id];
+        if (!prev || summary.time > prev.time) byBooking[id] = summary;
+      });
+    });
+  } catch (error) {
+    console.error(error);
+  }
+  return byBooking;
+};
+const getPendingProductPaymentsByBooking = (userId) =>
+  getPendingPaymentsByBooking(userId, 'paymentRequestApi', (r) => !!r.productRequest);
+const getPendingShipForMePaymentsByBooking = (userId) =>
+  getPendingPaymentsByBooking(userId, 'paymentRequest');
+/* Website (1688) orders share paymentRequestApi with product requests; keyed by orderId */
+const getPendingOrderPaymentsByOrder = (userId) =>
+  getPendingPaymentsByBooking(userId, 'paymentRequestApi', (r) => !r.productRequest);
+
+/* Every payment request the customer has submitted, any status, for the
+   dashboard's Transaction History. 1688-order and product-request payments
+   live in paymentRequestApi; Ship For Me payments in paymentRequest. Each
+   collection is read on its own so one failing (rules, network) still
+   leaves the other. */
+export const getPaymentRequestsOfUser = async (userId) => {
+  if (!userId) return [];
+  const read = async (collectionName) => {
+    try {
+      const snap = await getDocs(query(collection(firestore, collectionName), where('userId', '==', userId)));
+      return snap.docs.map((d) => ({ ...d.data(), _id: d.id, _collection: collectionName }));
+    } catch (error) {
+      console.error(`payment requests (${collectionName})`, error);
+      return [];
+    }
+  };
+  const [api, ship] = await Promise.all([read('paymentRequestApi'), read('paymentRequest')]);
+  return [...api, ...ship];
+};
+
 export const getAllBookingsOfSingleUser = async (userId) => {
   const bookingsCollectionRef = collection(firestore, 'bookingRequest');
   const q = query(bookingsCollectionRef, where('userId', '==', userId));
   try {
-    const bookings = await getDocs(q);
+    const [bookings, pendingByBooking] = await Promise.all([
+      getDocs(q),
+      getPendingProductPaymentsByBooking(userId),
+    ]);
     const bookingsArray = [];
-    bookings.forEach((d) => { bookingsArray.push(d.data()); });
+    bookings.forEach((d) => {
+      const booking = d.data();
+      const pending = pendingByBooking[booking.bookingId];
+      bookingsArray.push(pending ? { ...booking, pendingPaymentRequest: pending } : booking);
+    });
     return bookingsArray.sort((a, b) => b.time - a.time);
   } catch (error) {
     console.error(error);
@@ -415,9 +491,16 @@ export const getAllShipForMeOfSingleUser = async (userId) => {
   const bookingsCollectionRef = collection(firestore, 'shipForMe');
   const q = query(bookingsCollectionRef, where('userId', '==', userId));
   try {
-    const bookings = await getDocs(q);
+    const [bookings, pendingByBooking] = await Promise.all([
+      getDocs(q),
+      getPendingShipForMePaymentsByBooking(userId),
+    ]);
     const bookingsArray = [];
-    bookings.forEach((d) => { bookingsArray.push(d.data()); });
+    bookings.forEach((d) => {
+      const booking = d.data();
+      const pending = booking.paymentRequested && pendingByBooking[booking.bookingId];
+      bookingsArray.push(pending ? { ...booking, pendingPaymentRequest: pending } : booking);
+    });
     return bookingsArray.sort((a, b) => b.time - a.time);
   } catch (error) {
     console.error(error);
@@ -456,6 +539,23 @@ export const setShipForMe = async (bookingObj) => {
     }
   } else {
     toast.error('there is already a booking with similar uid, please try again later');
+  }
+};
+
+/* Rejects a Ship For Me booking whose parcel never reached the abroad
+   warehouse by its Valid To date (rule: isShipBookingExpired in buckets.js).
+   Same as the web; a daily Cloud Function does this server-side too. */
+export const autoRejectShipForMeApi = async (bookingId) => {
+  if (bookingId == null) return;
+  try {
+    await updateDoc(doc(firestore, 'shipForMe', String(bookingId)), {
+      status: 'Reject',
+      autoRejected: true,
+      rejectedReason: 'not-received-by-valid-date',
+      rejectedAt: Date.now(),
+    });
+  } catch (error) {
+    console.error(error);
   }
 };
 
@@ -768,7 +868,13 @@ export const getSingleProductRequest = async (id) => {
   const orderRef = doc(firestore, 'bookingRequest', id);
   try {
     const order = await getDoc(orderRef);
-    return order.data();
+    const data = order.data();
+    /* Same pending-payment details the request list shows */
+    if (data && data.paymentStatus === 'pending' && data.userId) {
+      const pending = (await getPendingProductPaymentsByBooking(data.userId))[data.bookingId];
+      if (pending) return { ...data, pendingPaymentRequest: pending };
+    }
+    return data;
   } catch (error) {
     console.error(error);
   }
@@ -1251,4 +1357,85 @@ export const saveWishlistToFirestore = async (profileId, wishlist) => {
     { wishlist: (wishlist || []).map((p) => ({ ...p, price_range: '', videos: '' })) },
     { merge: true },
   );
+};
+
+/* ─── In-app notifications ───
+   The admin panel writes one `notifications` doc per recipient:
+   { userId, title, body, type, time (ms), createdAt, read, readAt, sentBy,
+   batchId, audience }. The customer side only ever filters on userId — no
+   orderBy, so no composite index is needed — and sorts by `time` here,
+   keeping the newest NOTIFICATION_LIMIT. The only write a customer makes is
+   flipping `read` / `readAt` on their own docs. */
+export const NOTIFICATION_LIMIT = 50;
+
+/* Live list of the user's notifications, newest first. Calls
+   onChange(list) on every change and onError(error) if the listener fails.
+   Returns the unsubscribe function. */
+export const subscribeToUserNotifications = (userId, onChange, onError) => {
+  if (!userId) {
+    onChange([]);
+    return () => {};
+  }
+  const q = query(collection(firestore, 'notifications'), where('userId', '==', userId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = [];
+      snap.forEach((d) => { list.push({ ...d.data(), id: d.id }); });
+      list.sort((a, b) => (Number(b.time) || 0) - (Number(a.time) || 0));
+      onChange(list.slice(0, NOTIFICATION_LIMIT));
+    },
+    (error) => {
+      console.error('notifications listener', error);
+      if (onError) onError(error);
+    },
+  );
+};
+
+export const markNotificationRead = async (id) => {
+  if (!id) return;
+  await updateDoc(doc(firestore, 'notifications', String(id)), { read: true, readAt: Date.now() });
+};
+
+/* Batched; Firestore caps a batch at 500 writes, so larger lists are chunked. */
+export const markAllNotificationsRead = async (ids) => {
+  const list = (ids || []).filter(Boolean);
+  if (!list.length) return;
+  const readAt = Date.now();
+  for (let i = 0; i < list.length; i += 500) {
+    const batch = writeBatch(firestore);
+    list.slice(i, i + 500).forEach((id) => {
+      batch.update(doc(firestore, 'notifications', String(id)), { read: true, readAt });
+    });
+    await batch.commit();
+  }
+};
+
+/* ─── Request Delivery (To Receive) ───
+   Writes only `deliveryRequest` on the record (rules in lib/deliveryRequest.js).
+   kind: 'order' → ordersApi/{orderId} · 'request' → bookingRequest/{bookingId}
+   · 'ship' → shipForMe/{bookingId}. */
+const DELIVERY_COLLECTION = { order: 'ordersApi', request: 'bookingRequest', ship: 'shipForMe' };
+
+export const submitDeliveryRequest = async (kind, id, deliveryRequest) => {
+  const collectionName = DELIVERY_COLLECTION[kind];
+  if (!collectionName) throw new Error(`Unknown record kind: ${kind}`);
+  if (!id) throw new Error('Missing record id');
+  await updateDoc(doc(firestore, collectionName, String(id)), { deliveryRequest });
+};
+
+/* Bulk Request Delivery: one batch, so a grouped request (shared groupId)
+   lands on every record or on none. list: [{ kind, id, request }] from
+   buildDeliveryRequests. */
+export const submitDeliveryRequests = async (list) => {
+  const items = (list || []).filter(Boolean);
+  if (!items.length) return;
+  const batch = writeBatch(firestore);
+  items.forEach(({ kind, id, request }) => {
+    const collectionName = DELIVERY_COLLECTION[kind];
+    if (!collectionName) throw new Error(`Unknown record kind: ${kind}`);
+    if (!id) throw new Error('Missing record id');
+    batch.update(doc(firestore, collectionName, String(id)), { deliveryRequest: request });
+  });
+  await batch.commit();
 };

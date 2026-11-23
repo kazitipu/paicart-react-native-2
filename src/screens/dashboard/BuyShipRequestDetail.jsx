@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ArrowLeft, Navigation2, FileText, RotateCcw } from 'lucide-react-native';
+import { ArrowLeft, FileText, RotateCcw } from 'lucide-react-native';
 import DashboardLayout from '@/components/DashboardLayout';
 import CopyIdButton from '@/components/CopyIdButton';
 import RefundApplyModal from '@/components/RefundApplyModal';
+import CartonBreakdown from '@/components/shipping/CartonBreakdown';
 import { ShipmentProgressVertical, usDate } from '@/components/orders/OrderBits';
 import { openProductLink, openBookAgain } from '@/components/requests/RequestBits';
 import { C, SHADOW, Press, Spinner } from '@/components/product/ui';
@@ -13,6 +14,8 @@ import { getSingleProductRequest } from '@/lib/firebaseUtils';
 import { refundMode, showRefundBlock, bookAgainId } from '@/lib/refund';
 import { isRefundGiven } from '@/lib/buckets';
 import { statusDisplay } from '@/lib/shipment';
+import PendingPaymentNotice from '@/components/payments/PendingPaymentNotice';
+import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/buy-and-ship-for-me/my-request/[orderId]/page.jsx at
@@ -124,12 +127,6 @@ export default function BuyShipRequestDetail() {
   const score = parseInt(order.shipmentStatusScore || 1, 10);
   const productLink = order.productUrl || order.productLink;
   const rebookId = isRefundGiven(order) ? bookAgainId(order) : null;
-  const trackingNos = order.trackingNo
-    ? String(order.trackingNo)
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
 
   const facts = [
     ['Product Type', order.productType || order.productName || '—'],
@@ -202,31 +199,16 @@ export default function BuyShipRequestDetail() {
           </View>
         </View>
 
-        {/* Tracking */}
-        {!!order.trackingNo && (
-          <Card>
-            <Text style={[LABEL, { marginBottom: 4 }]}>Tracking No</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {trackingNos.map((t, i) => (
-                <View
-                  key={i}
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 4,
-                    paddingHorizontal: 8,
-                    paddingVertical: 2,
-                    borderRadius: 8,
-                    backgroundColor: '#00B8A9',
-                  }}
-                >
-                  <Navigation2 size={9} color="#ffffff" />
-                  <Text style={[TXT.xs, { fontWeight: '700', color: '#ffffff' }]}>{t}</Text>
-                </View>
-              ))}
-            </View>
-          </Card>
+        {/* Request Delivery — To Receive only (renders nothing otherwise). */}
+        <DeliveryRequestPanel kind="request" record={order} />
+
+        {/* Payment request waiting for admin review */}
+        {!isRejected && order.paymentStatus === 'pending' && (
+          <PendingPaymentNotice request={order.pendingPaymentRequest} />
         )}
+
+        {/* Tracking numbers and their cartons */}
+        <CartonBreakdown record={order} />
 
         {/* Shipment progress — the sm:hidden vertical variant */}
         {!isRejected && (
@@ -260,7 +242,7 @@ export default function BuyShipRequestDetail() {
           </Card>
         )}
 
-        {/* Refund — same two-stage flow as a 1688 order: Quick Refund before
+        {/* Refund — same two-stage flow as a website order: Quick Refund before
             the parcel ships, After Sale once it is delivered. */}
         {showRefundBlock(order) && (
           <Card style={{ paddingVertical: 16 }}>
