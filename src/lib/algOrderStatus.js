@@ -121,10 +121,33 @@ const stageDates = (lot, parcels) => {
   };
 };
 
+/* A tracking number typed as a stand-in ("123456", "0", "00000", "test")
+   matches parcels of many customers on ALG; its lot says nothing about this
+   order. Same rule as the admin's constants/cartons.js. */
+const PLACEHOLDER_WORDS = ['test', 'na', 'n/a', 'none', 'null', 'undefined', 'nil', 'tbd', 'pending'];
+export const isPlaceholderTracking = (value) => {
+  const t = String(value == null ? '' : value).trim().toLowerCase();
+  if (t.length < 5 || PLACEHOLDER_WORDS.includes(t) || /^(.)\1+$/.test(t)) return true;
+  if (/^\d+$/.test(t)) {
+    const d = t.split('').map(Number);
+    if (d.every((v, i) => i === 0 || v === (d[i - 1] + 1) % 10)) return true;
+    if (d.every((v, i) => i === 0 || v === (d[i - 1] + 9) % 10)) return true;
+  }
+  return false;
+};
+
+/* An answer spanning many shipping marks / lots is a shared number */
+const isSharedAnswer = (parcels) => {
+  const marks = new Set(parcels.map((p) => String(p.shippingMark || '').trim().toLowerCase()).filter(Boolean));
+  const lots = new Set(parcels.map((p) => String(p.lotNo || '').trim().toLowerCase()).filter(Boolean));
+  return marks.size > 3 || lots.size > 5;
+};
+
 /* One tracking number's ALG answer → its stage index (-1 = nothing yet) */
 export const algStageOf = (alg) => {
   if (!alg) return -1;
   const parcels = alg.parcelsArray || alg.parcels || [];
+  if (isSharedAnswer(parcels)) return -1;
   const idx = lotStageIndex(alg.lotObj || alg.lot);
   /* cartons on file at ALG mean it's at least in the China warehouse */
   return Math.max(idx, parcels.length ? 0 : -1);
@@ -177,5 +200,5 @@ export const orderTrackingNumbers = (order) => {
   const list = Array.isArray(order && order.trackingNumbers) && order.trackingNumbers.length
     ? order.trackingNumbers
     : String((order && order.trackingNo) || '').split(/[,\n]/);
-  return Array.from(new Set(list.map((t) => String(t || '').trim()).filter(Boolean)));
+  return Array.from(new Set(list.map((t) => String(t || '').trim()).filter((t) => t && !isPlaceholderTracking(t))));
 };

@@ -18,12 +18,9 @@ export const ALGLIMITED_BASE = 'https://alglimited.com/api/v1';
 /* Paicart's own backend: OTP SMS and the bKash gateway. */
 export const PAICART_API_BASE = 'https://paicart.com/api/v1';
 
-/* RedX courier — called directly with the same API token the web app
- * ships in its page source (owner-approved, 2026-11-04). The token is in the
- * APK; rotating it needs an app release, so keep it in this one place. */
-export const REDX_BASE = 'https://openapi.redx.com.bd/v1.0.0-beta';
-const REDX_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3Njg5NDEiLCJpYXQiOjE3NTM4ODAxNTksImlzcyI6IkZVT2VESWVSZzlwdDRmeGUzSmRYb2tmNnZPYVFBYk1TIiwic2hvcF9pZCI6NzY4OTQxLCJ1c2VyX2lkIjoxMTY3ODQ1fQ.hDlvRuwKit8rpfz2ETnsfPW2lXT-JZS_2ZBZsMdvTfk';
-const redx = axios.create({ baseURL: REDX_BASE, timeout: 12000, headers: { 'API-ACCESS-TOKEN': REDX_TOKEN } });
+/* Courier (Pathao) locations and delivery charges go through Paicart's own
+   Cloud Functions — see lib/pathaoLocations.js. No courier credentials live
+   in the app. */
 
 export const alg = axios.create({ baseURL: ALG_BASE, timeout: 15000 });
 export const algLimited = axios.create({ baseURL: ALGLIMITED_BASE, timeout: 15000 });
@@ -80,25 +77,3 @@ export const searchTaobao = (query, page = 1) =>
 /* ── Paicart backend ── */
 
 export const sendOtpSms = (phoneNumber) => paicartApi.get(`/otp-sms-send/${phoneNumber}`);
-
-/* ── RedX courier ── */
-
-/* Returns null instead of throwing, so checkout falls back to its default
-   delivery charge rather than blocking the order. */
-export const getRedxCharge = async (params) => {
-  try {
-    const { data } = await redx.get('/charge/charge_calculator', { params });
-    return data;
-  } catch {
-    return null;
-  }
-};
-
-export const getRedxAreas = async (districtName) => {
-  try {
-    const { data } = await redx.get('/areas', { params: { district_name: districtName } });
-    return data?.areas || [];
-  } catch {
-    return [];
-  }
-};

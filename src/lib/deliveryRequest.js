@@ -116,9 +116,12 @@ export const defaultShippingAddress = (user) => {
     name: a.name || '',
     mobileNo: a.mobileNo || '',
     address: a.address || '',
+    area: a.area || '',
     thana: a.thana || '',
     district: a.district || '',
     division: a.division || '',
+    /* Pathao city / zone / area ids — Paicart books Pathao straight from these */
+    pathao: a.pathao || null,
   };
 };
 

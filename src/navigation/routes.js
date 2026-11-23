@@ -48,7 +48,9 @@ export const ROUTES = {
   LegacyOrderLogistics: { path: 'dashboard/pages/orderslogistics/:orderId', tab: TABS.CART },
 
   /* ── Dashboard ── */
-  DashboardOverview: { path: 'pages/dashboard', tab: TABS.ORDERS },
+  /* The Overview is the More tab's first screen (labelled "More", like the
+     website's BottomNav); the order/shipment screens stay in the Orders tab. */
+  DashboardOverview: { path: 'pages/dashboard', tab: TABS.MORE },
   BuyShipMyOrders: { path: 'pages/dashboard/buy-and-ship-for-me/my-orders', tab: TABS.ORDERS },
   BuyShipOrderDetail: { path: 'pages/dashboard/buy-and-ship-for-me/my-orders/:orderId', tab: TABS.ORDERS },
   BuyShipMyRequests: { path: 'pages/dashboard/buy-and-ship-for-me/my-request', tab: TABS.ORDERS },
@@ -65,7 +67,7 @@ export const ROUTES = {
   Points: { path: 'pages/dashboard/points', tab: TABS.ORDERS },
   UserInformation: { path: 'pages/dashboard/user/information', tab: TABS.ORDERS },
   UserSecurity: { path: 'pages/dashboard/user/security', tab: TABS.ORDERS },
-  Notifications: { path: 'pages/dashboard/notifications', tab: TABS.ORDERS },
+  Notifications: { path: 'pages/dashboard/notifications', tab: TABS.MORE },
 
   /* ── Services & public ── */
   ShipForMeForm: { path: 'pages/ship-for-me', tab: TABS.MORE },

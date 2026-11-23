@@ -5,6 +5,7 @@ import { LayoutGrid, ShoppingCart, ShoppingBag, Menu } from 'lucide-react-native
 import { TABS } from './routes';
 import { makeTabStack } from './makeTabStack';
 import TabBar from './TabBar';
+import useNotifications from '@/lib/useNotifications';
 
 const Tab = createBottomTabNavigator();
 
@@ -40,20 +41,24 @@ function useCartCount() {
 const CategoryStack = makeTabStack(TABS.CATEGORY, 'Categories');
 const CartStack = makeTabStack(TABS.CART, 'Cart');
 const HomeStack = makeTabStack(TABS.HOME, 'Home');
-const OrdersStack = makeTabStack(TABS.ORDERS, 'DashboardOverview');
-const MoreStack = makeTabStack(TABS.MORE, 'More');
+/* My Orders opens the orders list; the fifth tab (still labelled "More")
+   opens the dashboard Overview, which links everything the old More screen
+   did. The More screen stays registered (deep link /more). */
+const OrdersStack = makeTabStack(TABS.ORDERS, 'BuyShipMyOrders');
+const MoreStack = makeTabStack(TABS.MORE, 'DashboardOverview');
 
 /* First screen of each tab — a tab press always returns there (TabBar). */
 const INITIAL_SCREENS = {
   [TABS.CATEGORY]: 'Categories',
   [TABS.CART]: 'Cart',
   [TABS.HOME]: 'Home',
-  [TABS.ORDERS]: 'DashboardOverview',
-  [TABS.MORE]: 'More',
+  [TABS.ORDERS]: 'BuyShipMyOrders',
+  [TABS.MORE]: 'DashboardOverview',
 };
 
 export default function TabNavigator() {
   const cartCount = useCartCount();
+  const { unreadCount } = useNotifications();
 
   return (
     <Tab.Navigator
@@ -69,7 +74,9 @@ export default function TabNavigator() {
           {...props}
           icons={TAB_ICONS}
           initialScreens={INITIAL_SCREENS}
-          badges={{ [TABS.CART]: cartCount }}
+          badges={{ [TABS.CART]: cartCount, [TABS.MORE]: unreadCount }}
+          /* unread in-app notifications on More: "9+" above 9 */
+          badgeMax={{ [TABS.MORE]: 9 }}
         />
       )}
     >
@@ -93,10 +100,10 @@ export default function TabNavigator() {
         component={OrdersStack}
         options={{ title: 'My Orders' }}
       />
-      {/* The web's fifth tab opened a WhatsApp sheet. A phone has no footer, so
-          this tab also has to house everything the web Footer linked to — the
-          services, the policy pages and the profile. WhatsApp sits at the top
-          of it and on the floating button, so it is no harder to reach. */}
+      {/* The fifth tab keeps the "More" label but opens the dashboard
+          Overview, which carries the services, the policy pages, the profile
+          and the contact/WhatsApp links. Its badge is the unread in-app
+          notification count. */}
       <Tab.Screen
         name={TABS.MORE}
         component={MoreStack}

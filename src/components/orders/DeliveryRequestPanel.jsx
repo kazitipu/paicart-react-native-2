@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  getAllOrdersApiRedux, getAllBookingsOfSingleUserRedux, getAllShipForMeOfSingleUserRedux,
+} from '@/store/actions';
 import { Truck, ChevronDown, ChevronUp, CheckCircle2, PackageCheck, XCircle } from 'lucide-react-native';
 import { C, ORANGE, Press, ScalePress } from '@/components/product/ui';
 import { MethodRow, AddressBlock, NoteBox, blockerHint } from '@/components/orders/DeliveryBits';
@@ -46,6 +49,7 @@ const STRIP_TONE = {
 };
 
 export default function DeliveryRequestPanel({ kind, record, style }) {
+  const dispatch = useDispatch();
   const currentUser = useSelector((s) => s.user?.currentUser);
   const uid = currentUser?.id;
   const kb = useDashboardKeyboard();
@@ -126,7 +130,13 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
       await submitDeliveryRequest(kind, recordIdOf(kind, rec), payload);
       setLocalReq(payload);
       setOpen(false);
-      toast.success('Delivery request submitted');
+      toast.success(methodKey === 'pathao'
+        ? 'Home delivery requested — find it under My Home Delivery Request'
+        : 'Delivery request submitted');
+      /* reload this record's list so the card moves to the right tab at once
+         (a Pathao request leaves To Receive) */
+      const reload = { order: getAllOrdersApiRedux, request: getAllBookingsOfSingleUserRedux, ship: getAllShipForMeOfSingleUserRedux }[kind];
+      if (uid && reload) Promise.resolve(dispatch(reload(uid))).catch((e) => console.error('reload after delivery request', e));
     } catch (e) {
       console.error('submitDeliveryRequest', e);
       toast.error('Could not submit the delivery request. Please try again.');
@@ -139,7 +149,10 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
     const tone = STRIP_TONE[req.status] || STRIP_TONE.requested;
     const StripIcon = tone.Icon;
     const info = DELIVERY_METHODS.find((m) => m.key === req.method);
-    const addr = req.address;
+    /* requests made before addresses were saved with them fall back to the
+       customer's current default — same as the admin's Delivery Requests */
+    const savedAddr = req.address;
+    const addr = savedAddr || address;
     const addrText = addr ? [addr.name, addr.mobileNo, addr.address, addr.thana, addr.district, addr.division].filter(Boolean).join(', ') : '';
     const Row = ({ label, children }) => (
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 5 }}>
@@ -183,7 +196,10 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
             <Row label={req.method === 'office_pickup' ? 'Pickup' : 'Deliver to'}>
               {req.method === 'office_pickup'
                 ? 'Collect from the Paicart warehouse'
-                : addrText || 'No address was saved with this request — Paicart will contact you.'}
+                : addrText || 'No address on your profile — Paicart will contact you.'}
+              {req.method !== 'office_pickup' && addrText && !savedAddr
+                ? '\n(Your current default address — this request was sent before addresses were saved with it.)'
+                : ''}
             </Row>
             {req.method === 'office_pickup' && addrText ? (
               <Row label="Contact">{[addr.name, addr.mobileNo].filter(Boolean).join(', ')}</Row>

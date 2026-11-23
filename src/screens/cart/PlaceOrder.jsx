@@ -18,8 +18,8 @@ import { TS, tpx, SHADOW_SM, CC, sized } from '@/components/cart/CartBits';
 import { addToOrdersApiRedux, addToPendingOrdersRedux, removeItemFromCartRedux } from '@/store/actions';
 import { getSingleCoupon, updateUser, getAllPartials } from '@/lib/firebaseUtils';
 import { Timestamp } from '@/lib/firebase';
-import { getRedxCharge } from '@/lib/api';
-import { pickDefaultAddress, addrPhone, addrLine, addrAreaId } from '@/lib/address';
+import { getPathaoPrice } from '@/lib/pathaoLocations';
+import { pickDefaultAddress, addrPhone, addrLine } from '@/lib/address';
 import {
   summarise, orderBlockReason, validateCoupon, buildOrderDocs, getItemDiscountPct,
 } from '@/lib/checkout';
@@ -42,12 +42,13 @@ import { goHome } from '@/navigation/goHome';
    order documents come from lib/checkout (identical to the web).
 
    Kept RN-side decisions:
-   - No RedX bearer token in the APK: the BD delivery charge goes through
-     lib/api getRedxCharge (proxy, currently null) and falls back to the web's
-     own default of 100 — the order is never blocked on it.
-   - Addresses: the web's shape is { defaultShipping, mobileNo, thana,
-     division, areaObj } (lib/address). Entries written by older builds of
-     this app ({ isDefault, phone, area }) are still read as a fallback.
+   - BD delivery charge: Pathao's price plan via Paicart's Cloud Function
+     (lib/pathaoLocations) — no courier credentials in the APK. Falls back
+     to the web's flat 100 when the address has no `pathao` or the call
+     fails — the order is never blocked on it.
+   - Addresses: the shared shape { defaultShipping, mobileNo, district,
+     thana, area, pathao } (lib/address). Entries written by older builds of
+     this app ({ isDefault, phone, area: {…} }) are still read as a fallback.
    - Inputs (coupon, seller notes) keep their own text state so a parent
      re-render never drops characters; notes are read from a ref on submit.
 
@@ -541,27 +542,32 @@ export default function PlaceOrder() {
   );
 
   const defaultShipping = useMemo(() => pickDefaultAddress(currentUser?.addressBook || []), [currentUser?.addressBook]);
-  const areaId = addrAreaId(defaultShipping);
+  /* Local (Bangladesh) delivery charge per shop: Pathao's own price plan for
+     the default shipping address's Pathao city / zone and the shop's total
+     item weight (min 0.5 kg). No COD is added. Addresses saved before the
+     Pathao area picker (no `pathao`) keep the flat ৳100 — as does a failed
+     call. */
+  const pathaoCity = defaultShipping?.pathao?.cityId;
+  const pathaoZone = defaultShipping?.pathao?.zoneId;
+  const shopWeightKg = (order) => (order.items || []).reduce((a, item) => a + (parseFloat(item?.weight) || 0), 0);
+  const weightsKey = pendingOrders.map((o) => `${o.shopId}:${shopWeightKg(o)}`).join('|');
 
-  /* BD delivery charge per shop (web: RedX, weight of items[0], delivery +
-     COD charge, 100 on failure). */
   useEffect(() => {
-    if (!defaultShipping || pendingOrders.length === 0 || !areaId) return;
+    if (!pathaoCity || !pathaoZone || pendingOrders.length === 0) {
+      setDeliveryCharges({});
+      return undefined;
+    }
     let alive = true;
     (async () => {
       const map = {};
       for (const order of pendingOrders) {
         try {
-          const weightG = parseInt(parseFloat(order.items?.[0]?.weight || 0) * 1000, 10);
-          const data = await getRedxCharge({
-            delivery_area_id: areaId,
-            pickup_area_id: 288,
-            cash_collection_amount: 1000,
-            weight: weightG,
+          const plan = await getPathaoPrice({
+            cityId: pathaoCity,
+            zoneId: pathaoZone,
+            weight: Math.max(shopWeightKg(order), 0.5),
           });
-          /* null = no proxy configured; leave the shop unset so the order
-             falls back to 100, as the web does on a failed call. */
-          if (data) map[order.shopId] = (parseInt(data.deliveryCharge, 10) || 0) + (parseInt(data.codCharge, 10) || 0);
+          map[order.shopId] = Math.round(plan.finalPrice || plan.price || 100);
         } catch {
           map[order.shopId] = 100;
         }
@@ -572,7 +578,7 @@ export default function PlaceOrder() {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areaId, pendingOrders.length]);
+  }, [pathaoCity, pathaoZone, weightsKey]);
 
   /* ── totals ── */
   const summary = useMemo(

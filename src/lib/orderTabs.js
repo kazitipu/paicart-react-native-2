@@ -5,6 +5,7 @@
  * screens layer on top: the Refunds cross-cut, and the 72-hour auto-cancel.
  */
 import { getOrderBucket } from './orderMath';
+import { isToReceiveTab } from './dashboardData';
 
 export const STATUS_TABS = [
   'All', 'To Pay', 'To Ship', 'In Shipment', 'To Receive', 'Delivered', 'Refunds', 'Rejected',
@@ -15,6 +16,8 @@ export const matchesTab = (order, tab) => {
   /* Refunds is a cross-cutting flag, not a stage — an order can be awaiting a
      refund while sitting in any other bucket. */
   if (tab === 'Refunds') return !!order.refundStatus;
+  /* Pathao home deliveries live under My Home Delivery Request, not To Receive */
+  if (tab === 'To Receive') return isToReceiveTab(getOrderBucket(order), order);
   return getOrderBucket(order) === tab;
 };
 

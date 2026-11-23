@@ -155,7 +155,7 @@ export function buildOrderDocs(pendingOrders, ctx) {
       websiteName: '1688.com',
       currency: taka,
       /* Web schema (lib/address) — an entry left in the old RN shape is
-         rewritten so the admin panel finds mobileNo / thana / areaObj. */
+         rewritten so the admin panel finds mobileNo / thana / pathao. */
       deliveryAddress: defaultShipping ? toWebAddress(defaultShipping) : defaultShipping,
       deliveryCharge: deliveryCharges[shop.shopId] ?? 100,
     };

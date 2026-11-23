@@ -112,9 +112,14 @@ const countBy = (list, fn) => list.reduce((acc, r) => {
   acc[k] = (acc[k] || 0) + 1;
   return acc;
 }, {});
-export const orderCounts = (orders) => countBy(orders, getOrderBucket);
-export const shipmentCounts = (shipments) => countBy(shipments, getShipBucket);
-export const requestCounts = (requests) => countBy(requests, getRequestBucket);
+/* the status cards' To Receive leaves out parcels in home delivery */
+const withHomeDelivery = (bucketOf) => (r) => {
+  const b = bucketOf(r);
+  return b === 'To Receive' && isHomeDeliveryActive(r) ? 'Home Delivery' : b;
+};
+export const orderCounts = (orders) => countBy(orders, withHomeDelivery(getOrderBucket));
+export const shipmentCounts = (shipments) => countBy(shipments, withHomeDelivery(getShipBucket));
+export const requestCounts = (requests) => countBy(requests, withHomeDelivery(getRequestBucket));
 
 /* ── Dates ─────────────────────────────────────────────────────────────── */
 
@@ -298,6 +303,54 @@ export const buildTransactions = ({ paymentRequests = [], orders = [], requests 
   return txns.sort((a, b) => (b.time || 0) - (a.time || 0));
 };
 
+/* ── Home delivery (Pathao) ───────────────────────────────────────────
+   A parcel is "home delivery" from the moment the customer requests Pathao
+   (deliveryRequest.method 'pathao') — or Paicart books it with Pathao —
+   until Paicart rejects / cancels that request. While it is, it lives under
+   My Home Delivery Request and NOT in the To Receive lists; a rejection
+   puts it back in To Receive. SAME BLOCK in paicart-nextjs15 and
+   paicart-react-native src/lib/dashboardData.js. */
+export const isHomeDeliveryActive = (r) => {
+  if (!r) return false;
+  const dr = r.deliveryRequest;
+  if (dr && dr.method && dr.status === 'cancelled') return false;
+  if (dr && dr.method === 'pathao') return true;
+  return !!(r.pathaoBooking && r.pathaoBooking.consignmentId);
+};
+
+/* To Receive, minus parcels that moved to home delivery */
+export const isToReceiveTab = (bucket, r) => bucket === 'To Receive' && !isHomeDeliveryActive(r);
+
+/* Pathao merchant plan by weight (same table as the admin Delivery page);
+   COD is 1% of what Pathao collects, only when something is due. */
+export const estimatePathaoCharges = (weightKg, due) => {
+  const w = Math.max(Number(weightKg) || 0, 0);
+  let delivery;
+  if (w <= 0.2) delivery = 60;
+  else if (w <= 0.5) delivery = 70;
+  else if (w <= 1) delivery = 80;
+  else if (w <= 1.5) delivery = 90;
+  else if (w <= 2) delivery = 100;
+  else delivery = 100 + Math.ceil(w - 2) * 15;
+  const d = Math.max(Number(due) || 0, 0);
+  const cod = d > 0 ? Math.round((d + delivery) * 0.01) : 0;
+  return { delivery, cod, total: d + delivery + cod };
+};
+
+/* parcel weight: weighed cartons, else the record's received weight */
+export const parcelWeightOf = (r) => {
+  const cartons = (r && r.cartons) || [];
+  const fromCartons = cartons.reduce((a, c) => a + (parseFloat(c.bdWeight) || parseFloat(c.cnWeight) || 0), 0);
+  return fromCartons || parseFloat(r && r.receivedWeight) || 0;
+};
+
+/* Single / Master / Baby carton — Paicart's booking says which */
+export const cartonTypeOf = (r) => {
+  const b = r && r.pathaoBooking;
+  if (b && b.parcelType) return b.parcelType;
+  return ((r && r.cartons) || []).length > 1 ? 'Master CTN' : 'Single CTN';
+};
+
 /* ── Pathao home delivery ──────────────────────────────────────────────── */
 
 export const PATHAO_STAGES = [
@@ -345,11 +398,34 @@ const firstOrderItem = (o) => {
   };
 };
 
+/* Before Pathao has the parcel the timeline shows Paicart's own two steps */
+export const HOME_DELIVERY_PRE_STAGES = [
+  { key: 'requested', label: 'Requested' },
+  { key: 'approved', label: 'Approved' },
+];
+
+/* Every parcel in home delivery (isHomeDeliveryActive) — requested, approved
+   or already with Pathao — with its stage, carton type and the amount the
+   rider will collect: due + Pathao delivery charge + COD charge (Paicart's
+   booking figures once booked, an estimate from the weight before that). */
 export const buildHomeDeliveries = (orders = [], requests = [], shipments = []) => {
   const rows = [];
   const push = (kind, rec, id, info, due) => {
-    const b = rec.pathaoBooking;
-    if (!b || !b.consignmentId) return;
+    if (!isHomeDeliveryActive(rec)) return;
+    const b = rec.pathaoBooking && rec.pathaoBooking.consignmentId ? rec.pathaoBooking : null;
+    const dr = rec.deliveryRequest || {};
+    const productDue = Math.max(due, 0);
+    let charges;
+    if (b) {
+      const delivery = b.deliveryFee != null ? toInt(b.deliveryFee) : 0;
+      const total = toInt(b.amountToCollect);
+      const cod = b.codCharge != null ? toInt(b.codCharge) : Math.max(total - productDue - delivery, 0);
+      charges = { due: b.dueAmount != null ? toInt(b.dueAmount) : productDue, delivery, cod, total, estimated: false };
+    } else {
+      const est = estimatePathaoCharges(parcelWeightOf(rec), productDue);
+      charges = { due: productDue, delivery: est.delivery, cod: est.cod, total: est.total, estimated: true };
+    }
+    const stage = b ? normalizePathaoStatus(b.orderStatus) : dr.status === 'arranged' || dr.status === 'delivered' ? 'approved' : 'requested';
     rows.push({
       kind,
       id: String(id),
@@ -357,14 +433,25 @@ export const buildHomeDeliveries = (orders = [], requests = [], shipments = []) 
       title: info.title,
       image: info.image,
       qty: info.qty,
-      consignmentId: String(b.consignmentId),
-      status: normalizePathaoStatus(b.orderStatus),
-      rawStatus: b.orderStatus || 'Pending',
-      deliveryFee: b.deliveryFee != null ? toInt(b.deliveryFee) : null,
-      amountToCollect: toInt(b.amountToCollect),
-      recipientPhone: b.recipientPhone || '',
-      bookedAt: b.bookedAt ? Date.parse(b.bookedAt) : parseRecordDate(b.bookedDate),
-      productDue: Math.max(due, 0),
+      booked: !!b,
+      consignmentId: b ? String(b.consignmentId) : '',
+      status: stage,
+      rawStatus: b ? b.orderStatus || 'Pending' : dr.status === 'arranged' ? 'Approved by Paicart' : 'Waiting for Paicart',
+      cartonType: cartonTypeOf(rec),
+      cartons: Math.max(((rec.cartons) || []).length, 1),
+      weight: parcelWeightOf(rec),
+      charges,
+      deliveryFee: charges.delivery,
+      amountToCollect: charges.total,
+      recipientPhone: (b && b.recipientPhone) || (dr.address && dr.address.mobileNo) || '',
+      requestedAt: Number(dr.requestedAt) || 0,
+      /* Pathao city/zone of the address sent with the request — the screen
+         asks Pathao's price plan for the exact charge while unbooked */
+      pathaoLoc: dr.address && dr.address.pathao && dr.address.pathao.cityId && dr.address.pathao.zoneId
+        ? { cityId: dr.address.pathao.cityId, zoneId: dr.address.pathao.zoneId }
+        : null,
+      bookedAt: b ? (b.bookedAt ? Date.parse(b.bookedAt) : parseRecordDate(b.bookedDate)) : Number(dr.requestedAt) || 0,
+      productDue,
     });
   };
   orders.forEach((o) => push('order', o, o.orderId, firstOrderItem(o), getOrderDue(o)));

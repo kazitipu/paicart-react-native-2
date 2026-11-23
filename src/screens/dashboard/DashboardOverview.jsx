@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import Clipboard from '@react-native-clipboard/clipboard';
 import DashboardLayout from '@/components/DashboardLayout';
 import ComplaintModal from '@/components/ComplaintModal';
-import { Press, ORANGE } from '@/components/product/ui';
+import { Press } from '@/components/product/ui';
 import { toast } from '@/lib/toast';
 import { signOutEverywhere } from '@/lib/firebase';
 import { getPaymentRequestsOfUser } from '@/lib/firebaseUtils';
@@ -29,10 +29,8 @@ import {
   StatusPanel, RequestAction, QuickList, ServiceCard, TwoCol, ContactPanel, RecentCard, EmptyPanel,
 } from '@/components/dashboard/Sections';
 import Icon from '@/components/dashboard/icons';
-import { SectionHeading, PANEL, D, enIN, openRecord, openList, toMore, toHomeTab } from '@/components/dashboard/ui';
-import Avatar from '@/components/Avatar';
-import NotificationBell from '@/components/NotificationBell';
-import useNotifications from '@/lib/useNotifications';
+import { SectionHeading, PANEL, D, enIN, openRecord, openList, toMore, toHomeTab, toOrdersTab } from '@/components/dashboard/ui';
+import NotificationBar from '@/components/dashboard/NotificationBar';
 import { BulkDeliveryButton } from '@/components/orders/BulkDeliveryRequest';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -205,23 +203,6 @@ export default function DashboardOverview() {
     [navigation],
   );
 
-  /* Admin → customer notifications: bell + unread badge in the top bar. */
-  const { unreadCount } = useNotifications();
-  const headerAction = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <NotificationBell count={unreadCount} onPress={requireLogin(() => navigation.navigate('Notifications'))} />
-      <Avatar
-        user={currentUser}
-        sizeClass="w-8 h-8"
-        textClass="text-sm"
-        roundedClass="rounded-full"
-        bgClass=""
-        ringClass=""
-        ringStyle={{ backgroundColor: ORANGE }}
-      />
-    </View>
-  );
-
   const points = parseInt(currentUser?.totalPoints, 10) || 0;
   const level = getLevelMeta(currentUser?.buyerLvl || computeBuyerLvl(points));
 
@@ -229,7 +210,6 @@ export default function DashboardOverview() {
     <DashboardLayout
       webChrome
       title="Dashboard"
-      headerAction={headerAction}
       onRefresh={uid ? onRefresh : null}
       refreshing={refreshing}
       overlays={
@@ -240,13 +220,16 @@ export default function DashboardOverview() {
       }
     >
       <View style={{ gap: 18, paddingBottom: 8 }}>
+        {/* ── In-app notifications (hidden while signed out) ── */}
+        <NotificationBar onPress={() => navigation.navigate('Notifications')} />
+
         {/* ── Profile + outstanding due ── */}
         <ProfileCard
           user={currentUser}
           displayId={displayId}
           shippingMark={shippingMark}
           onCopy={copyText}
-          onEdit={requireLogin(() => navigation.navigate('UserInformation'))}
+          onEdit={requireLogin(() => toOrdersTab(navigation, 'UserInformation'))}
           outstanding={outstanding}
           loaded={loaded}
           transactions={transactions}
@@ -297,7 +280,7 @@ export default function DashboardOverview() {
               blue
               icon="home"
               title="My Home Delivery Request"
-              sub={deliveries.length ? `${deliveries.length} Pathao deliver${deliveries.length === 1 ? 'y' : 'ies'}` : 'Check your home delivery requests'}
+              sub={deliveries.length ? `${deliveries.length} home deliver${deliveries.length === 1 ? 'y' : 'ies'} with Pathao` : 'Check your home delivery requests'}
               onPress={() => setDeliveryOpen(true)}
             />
           </View>
@@ -310,10 +293,10 @@ export default function DashboardOverview() {
           <SectionHeading title="My Account" />
           <QuickList
             rows={[
-              { icon: 'user', tone: 'blue', title: 'Profile & Address', sub: 'Manage your details and delivery address', onPress: requireLogin(() => navigation.navigate('UserInformation')) },
-              { icon: 'lock', tone: 'violet', title: 'Password & Security', sub: 'Protect your account and sign-in', onPress: requireLogin(() => navigation.navigate('UserSecurity')) },
-              { icon: 'refund', tone: 'green', title: 'My Refund', sub: 'Check your refund requests and status', onPress: () => navigation.navigate('Refunds') },
-              { icon: 'star', tone: 'orange', title: 'Points & Level', sub: `${enIN(points)} points · ${level.label}`, onPress: () => navigation.navigate('Points') },
+              { icon: 'user', tone: 'blue', title: 'Profile & Address', sub: 'Manage your details and delivery address', onPress: requireLogin(() => toOrdersTab(navigation, 'UserInformation')) },
+              { icon: 'lock', tone: 'violet', title: 'Password & Security', sub: 'Protect your account and sign-in', onPress: requireLogin(() => toOrdersTab(navigation, 'UserSecurity')) },
+              { icon: 'refund', tone: 'green', title: 'My Refund', sub: 'Check your refund requests and status', onPress: () => toOrdersTab(navigation, 'Refunds') },
+              { icon: 'star', tone: 'orange', title: 'Points & Level', sub: `${enIN(points)} points · ${level.label}`, onPress: () => toOrdersTab(navigation, 'Points') },
               {
                 icon: 'logout',
                 logout: true,

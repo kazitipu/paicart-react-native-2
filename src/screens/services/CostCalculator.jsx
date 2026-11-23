@@ -147,7 +147,7 @@ export default function CostCalculator() {
     ...d2dRates.map((r) => ({ value: r.id, label: String(r.id) })),
   ];
 
-  const goDashboard = () => navigation.navigate(TABS.ORDERS, { screen: 'DashboardOverview' });
+  const goDashboard = () => navigation.navigate(TABS.MORE, { screen: 'DashboardOverview' });
   const goHome = () => goHomeNav();
 
   return (

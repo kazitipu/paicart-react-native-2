@@ -28,7 +28,7 @@ const HOME_SIZE = 58;
 const SPRING = { damping: 16, stiffness: 190, mass: 0.8 };
 
 /* Count badge that pops whenever the number goes up. */
-function Badge({ count }) {
+function Badge({ count, max = 99 }) {
   const scale = useSharedValue(count ? 1 : 0);
   const prev = useRef(count);
   useEffect(() => {
@@ -51,13 +51,13 @@ function Badge({ count }) {
       pointerEvents="none"
       style={[styles.badge, style]}
     >
-      <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+      <Text style={styles.badgeText}>{count > max ? `${max}+` : count}</Text>
     </Animated.View>
   );
 }
 
 /* A regular tab: icon springs up and tints when focused, label firms up. */
-function TabItem({ focused, label, Icon, badge, onPress, onLongPress, accessibilityLabel }) {
+function TabItem({ focused, label, Icon, badge, badgeMax, onPress, onLongPress, accessibilityLabel }) {
   const p = useSharedValue(focused ? 1 : 0);
   const press = useSharedValue(1);
   useEffect(() => {
@@ -88,7 +88,7 @@ function TabItem({ focused, label, Icon, badge, onPress, onLongPress, accessibil
     >
       <Animated.View style={[styles.iconWrap, iconStyle]}>
         <Icon color={focused ? ACTIVE : INACTIVE} size={22} strokeWidth={focused ? 2.3 : 1.9} />
-        <Badge count={badge} />
+        <Badge count={badge} max={badgeMax} />
       </Animated.View>
       <Animated.Text numberOfLines={1} style={[styles.label, focused && styles.labelActive, labelStyle]}>
         {label}
@@ -190,7 +190,7 @@ export default function TabBar(props) {
   return <TabBarInner {...props} />;
 }
 
-function TabBarInner({ state, descriptors, navigation, badges = {}, icons = {}, initialScreens = {} }) {
+function TabBarInner({ state, descriptors, navigation, badges = {}, badgeMax = {}, icons = {}, initialScreens = {} }) {
   const insets = useSafeAreaInsets();
   const [width, setWidth] = useState(0);
   const count = state.routes.length;
@@ -263,6 +263,7 @@ function TabBarInner({ state, descriptors, navigation, badges = {}, icons = {}, 
               label={label}
               Icon={icons[route.name]}
               badge={badges[route.name]}
+              badgeMax={badgeMax[route.name]}
               onPress={onPress}
               onLongPress={onLongPress}
               accessibilityLabel={options.tabBarAccessibilityLabel ?? label}

@@ -1,17 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Modal, ScrollView, Pressable, Linking } from 'react-native';
+import { useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ProductImage from '@/components/ui/ProductImage';
 import { Press } from '@/components/product/ui';
 import { toast } from '@/lib/toast';
-import { PATHAO_STAGES, PATHAO_STATUS_LABEL, formatDateTime } from '@/lib/dashboardData';
+import { HOME_DELIVERY_PRE_STAGES, PATHAO_STAGES, PATHAO_STATUS_LABEL, formatDateTime } from '@/lib/dashboardData';
 import Icon from './icons';
 import { money } from './ui';
+import { getPathaoPrice } from '@/lib/pathaoLocations';
 
 /* Port of the web's _overview/HomeDeliveryModal.jsx: the customer's Pathao
    home deliveries (orders / product requests / ship-for-me) in three tabs,
    each with its bill breakdown, request details and delivery timeline.
    <details> accordions become local toggles. */
+
+/* Paicart's two steps (Requested, Approved), then Pathao's six */
+const STAGES = [...HOME_DELIVERY_PRE_STAGES, ...PATHAO_STAGES];
+const STAGE_LABEL = { requested: 'Waiting for Paicart', approved: 'Approved by Paicart', ...PATHAO_STATUS_LABEL };
 
 const TABS = [
   { key: 'order', label: 'Website Order', title: 'My Home Delivery Request', subtitle: 'Website orders with Pathao home delivery tracking.' },
@@ -38,11 +44,11 @@ function StatusPill({ label, terminal }) {
 function Timeline({ row }) {
   const [open_, setOpen] = useState(false);
   const terminal = row.status === 'cancelled' || row.status === 'returned';
-  const idx = PATHAO_STAGES.findIndex((s) => s.key === row.status);
+  const idx = STAGES.findIndex((s) => s.key === row.status);
   const lastIndex = terminal ? -1 : idx;
-  const progress = Math.max(0, Math.min(100, ((lastIndex + 1) / PATHAO_STAGES.length) * 100));
+  const progress = Math.max(0, Math.min(100, ((lastIndex + 1) / STAGES.length) * 100));
   const reached = Math.max(0, lastIndex + 1);
-  const label = PATHAO_STATUS_LABEL[row.status] || 'Request received';
+  const label = STAGE_LABEL[row.status] || 'Request received';
 
   return (
     <View style={{ marginTop: 9, borderWidth: 1, borderColor: '#e8f0fa', borderRadius: 14, backgroundColor: '#f8fbff', overflow: 'hidden' }}>
@@ -52,7 +58,7 @@ function Timeline({ row }) {
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#2d3742' }}>Pathao Delivery Timeline</Text>
-          <Text style={{ fontSize: 10, color: '#7b8998', marginTop: 2 }}>{terminal ? label : `${reached} of 6 delivery steps reached`}</Text>
+          <Text style={{ fontSize: 10, color: '#7b8998', marginTop: 2 }}>{terminal ? label : `${reached} of ${STAGES.length} delivery steps reached`}</Text>
           <View style={{ height: 4, marginTop: 6, borderRadius: 99, backgroundColor: '#e3eaf2', overflow: 'hidden' }}>
             <View style={{ width: `${progress}%`, height: '100%', borderRadius: 99, backgroundColor: '#3478bc' }} />
           </View>
@@ -67,7 +73,7 @@ function Timeline({ row }) {
         <View style={{ paddingHorizontal: 11, paddingBottom: 12, borderTopWidth: 1, borderTopColor: '#e8f0fa' }}>
           {/* stepper */}
           <View style={{ flexDirection: 'row', marginTop: 12 }}>
-            {PATHAO_STAGES.map((stage, i) => {
+            {STAGES.map((stage, i) => {
               const done = !terminal && (i < lastIndex || (i === lastIndex && row.status === 'delivered'));
               const current = !terminal && i === lastIndex && row.status !== 'delivered';
               return (
@@ -100,7 +106,11 @@ function Timeline({ row }) {
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#25303b' }}>{label}</Text>
               <Text style={{ fontSize: 10, lineHeight: 14, color: '#6f7b88', marginTop: 2 }}>
-                Latest status from Pathao: {row.rawStatus}. Open live tracking for every scan.
+                {row.booked
+                  ? `Latest status from Pathao: ${row.rawStatus}. Open live tracking for every scan.`
+                  : row.status === 'approved'
+                    ? 'Paicart approved your home delivery and will hand the parcel to Pathao shortly.'
+                    : 'Paicart will review your home delivery request soon.'}
               </Text>
               <Text style={{ fontSize: 9.5, color: '#93a0ad', marginTop: 4 }}>{formatDateTime(row.bookedAt)}</Text>
             </View>
@@ -157,7 +167,7 @@ function SmallBtn({ label, primary, onPress }) {
 function DeliveryCard({ row, onOpenRecord }) {
   const [details, setDetails] = useState(false);
   const [bill, setBill] = useState(false);
-  const fee = row.deliveryFee || 0;
+  const c = row.charges;
   return (
     <View style={{ padding: 12, borderWidth: 1, borderColor: '#e9edf1', borderRadius: 15, backgroundColor: '#ffffff', boxShadow: '0 3px 12px rgba(32,42,54,0.035)' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -166,14 +176,18 @@ function DeliveryCard({ row, onOpenRecord }) {
         </View>
         <Text style={{ flex: 1, fontSize: 12.5, fontWeight: '800', color: '#25303b' }} numberOfLines={1}>{row.title}</Text>
         <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: '#eaf3ff' }}>
-          <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#3478bc' }}>Pathao</Text>
+          <Text style={{ fontSize: 9.5, fontWeight: '800', color: '#3478bc' }}>{row.cartonType}</Text>
         </View>
       </View>
-      <Text style={{ fontSize: 10, color: '#8b95a1', marginTop: 6 }}>Booked {formatDateTime(row.bookedAt)}</Text>
+      <Text style={{ fontSize: 10, color: '#8b95a1', marginTop: 6 }}>
+        {row.booked ? `Booked ${formatDateTime(row.bookedAt)}` : `Requested ${formatDateTime(row.requestedAt)}`}
+        {` · ${row.cartons} carton${row.cartons === 1 ? '' : 's'}`}
+        {row.weight ? ` · ${Number(row.weight).toFixed(1)} kg` : ''}
+      </Text>
 
       <View style={{ flexDirection: 'row', gap: 7, marginTop: 9 }}>
         <Cell label={row.kind === 'order' ? 'ORDER ID' : 'BOOKING ID'} value={row.id} />
-        <Cell label="CONSIGNMENT ID" value={row.consignmentId} orange />
+        <Cell label="CONSIGNMENT ID" value={row.consignmentId || 'Awaiting Pathao booking'} orange />
       </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 9 }}>
@@ -193,18 +207,33 @@ function DeliveryCard({ row, onOpenRecord }) {
         </Pressable>
         {bill ? (
           <View style={{ paddingHorizontal: 10, paddingBottom: 8 }}>
-            <BreakRow label="Product bill due" value={money(row.productDue)} />
-            <BreakRow label="Pathao delivery charge" value={row.deliveryFee == null ? '—' : money(fee)} />
-            <BreakRow label="Pathao collection amount" value={money(row.amountToCollect)} total />
+            <BreakRow label="Product bill due" value={money(c.due)} />
+            <BreakRow label="Pathao home delivery charge" value={money(c.delivery)} />
+            <BreakRow label="COD charge" value={money(c.cod)} />
+            <BreakRow label="Total Pathao collection" value={money(c.total)} total />
+            {c.estimated ? (
+              <Text style={{ fontSize: 9.5, lineHeight: 13, color: '#8b95a1', marginTop: 4 }}>
+                Estimated from the parcel weight — add a Pathao delivery area to your address for the exact charge.
+              </Text>
+            ) : null}
+            {c.fromPathao ? (
+              <Text style={{ fontSize: 9.5, lineHeight: 13, color: '#8b95a1', marginTop: 4 }}>
+                Pathao's own charge for your area and this parcel's weight.
+              </Text>
+            ) : null}
           </View>
         ) : null}
       </View>
 
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-        <Text style={{ fontSize: 11, color: '#3c4651', fontWeight: '600' }}>Pathao Collection Amount:</Text>
-        <Text style={{ fontSize: 14, fontWeight: '900', color: '#e66a1b' }}>{money(row.amountToCollect)}</Text>
+        <Text style={{ fontSize: 11, color: '#3c4651', fontWeight: '600' }}>{c.estimated ? 'Est. Pathao Collection:' : 'Pathao Collection Amount:'}</Text>
+        <Text style={{ fontSize: 14, fontWeight: '900', color: '#e66a1b' }}>{money(c.total)}</Text>
       </View>
-      <Text style={{ fontSize: 9.5, color: '#8b95a1', marginTop: 2 }}>Collected by the rider on delivery (cash on delivery)</Text>
+      <Text style={{ fontSize: 9.5, color: '#8b95a1', marginTop: 2 }}>
+        {c.due > 0
+          ? 'Pay the rider on delivery (cash on delivery) — due + delivery + COD.'
+          : 'Your bill is paid — the rider collects only the delivery and COD charges.'}
+      </Text>
 
       <Press
         onPress={() => setDetails((v) => !v)}
@@ -217,18 +246,21 @@ function DeliveryCard({ row, onOpenRecord }) {
         <View style={{ marginTop: 10, padding: 10, borderRadius: 12, backgroundColor: '#fbfcfd', borderWidth: 1, borderColor: '#edf0f3' }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#25303b' }}>Pathao Request Details</Text>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#bf6417' }}>{PATHAO_STATUS_LABEL[row.status]}</Text>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#bf6417' }}>{STAGE_LABEL[row.status]}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 7 }}>
-            <Cell label="CONSIGNMENT ID" value={row.consignmentId} />
-            <Cell label="RECIPIENT PHONE" value={row.recipientPhone || '—'} />
+            <Cell label="CONSIGNMENT ID" value={row.consignmentId || 'Not booked yet'} />
+            <Cell label="CARTON TYPE" value={row.cartonType} />
           </View>
           <View style={{ flexDirection: 'row', gap: 7, marginTop: 7 }}>
+            <Cell label="RECIPIENT PHONE" value={row.recipientPhone || '—'} />
             <Cell label="DELIVERY PARTNER" value="Pathao" />
-            <Cell label="COLLECTION METHOD" value={row.amountToCollect > 0 ? 'Cash on Delivery (COD)' : 'No collection due'} />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 7, marginTop: 7 }}>
+            <Cell label="COLLECTION METHOD" value={c.total > 0 ? 'Cash on Delivery (COD)' : 'No collection due'} />
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-            <SmallBtn primary label="Track on Pathao ↗" onPress={() => open(trackUrl(row))} />
+            {row.booked ? <SmallBtn primary label="Track on Pathao ↗" onPress={() => open(trackUrl(row))} /> : null}
             <SmallBtn label={`Open ${row.kind === 'order' ? 'order' : 'booking'}`} onPress={() => onOpenRecord(row)} />
           </View>
         </View>
@@ -239,9 +271,59 @@ function DeliveryCard({ row, onOpenRecord }) {
   );
 }
 
-export default function HomeDeliveryModal({ visible, rows, onClose, onOpenRecord }) {
+/* Exact Pathao charges for rows not booked yet: Pathao's price plan for the
+   address's city / zone and the parcel weight (else the customer's default
+   address), COD at Pathao's own percentage. Booked rows already carry
+   Paicart's booking figures. Port of the web's useExactCharges. */
+function useExactCharges(rows, active) {
+  const fallback = useSelector((s) => {
+    const book = s.user?.currentUser?.addressBook || [];
+    const a = book.find((x) => x && x.defaultShipping) || book[0];
+    return a && a.pathao && a.pathao.cityId && a.pathao.zoneId ? `${a.pathao.cityId}:${a.pathao.zoneId}` : '';
+  });
+  const [exact, setExact] = useState({});
+  const pending = rows.filter((r) => !r.booked && (r.pathaoLoc || fallback));
+  const key = pending.map((r) => `${r.kind}-${r.id}:${r.charges.due}:${r.weight}`).join('|');
+  useEffect(() => {
+    if (!active) return undefined;
+    let alive = true;
+    pending.forEach((r) => {
+      const [cityId, zoneId] = r.pathaoLoc ? [r.pathaoLoc.cityId, r.pathaoLoc.zoneId] : fallback.split(':');
+      getPathaoPrice({ cityId, zoneId, weight: Math.max(Number(r.weight) || 0, 0.5) })
+        .then((plan) => {
+          if (!alive) return;
+          const delivery = Math.round(plan.finalPrice || plan.price || 0);
+          const due = r.charges.due;
+          const cod = due > 0 ? Math.round((due + delivery) * (plan.codPercentage || 0)) : 0;
+          setExact((m) => ({
+            ...m,
+            [`${r.kind}-${r.id}`]: { due, delivery, cod, total: due + delivery + cod, estimated: false, fromPathao: true },
+          }));
+        })
+        .catch(() => {});
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, fallback, active]);
+  return rows.map((r) => {
+    const e = !r.booked && exact[`${r.kind}-${r.id}`];
+    return e ? { ...r, charges: e, deliveryFee: e.delivery, amountToCollect: e.total } : r;
+  });
+}
+
+export default function HomeDeliveryModal({ visible, rows: rawRows, onClose, onOpenRecord }) {
+  /* only asks Pathao while the sheet is open */
+  const rows = useExactCharges(rawRows, visible);
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState('order');
+  /* opens on the first type that has a home delivery */
+  const firstWithRows = (TABS.find((t) => rows.some((r) => r.kind === t.key)) || TABS[0]).key;
+  const [tab, setTab] = useState(firstWithRows);
+  useEffect(() => {
+    if (visible) setTab(firstWithRows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when it opens
+  }, [visible]);
   const meta = TABS.find((t) => t.key === tab);
   const list = rows.filter((r) => r.kind === tab);
 
@@ -297,7 +379,7 @@ export default function HomeDeliveryModal({ visible, rows, onClose, onOpenRecord
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 11.5, fontWeight: '800', color: '#2d3742' }}>Pathao Delivery Tracking</Text>
               <Text style={{ fontSize: 9.5, lineHeight: 13, color: '#7b8998', marginTop: 2 }}>
-                Pickup requested · Rider assigned · Picked from Paicart · In Transit · Ready for Delivery · Delivered · Cancelled · Returned
+                Requested · Approved · Pickup requested · Rider assigned · Picked from Paicart · In Transit · Ready for Delivery · Delivered
               </Text>
             </View>
           </View>
@@ -310,7 +392,7 @@ export default function HomeDeliveryModal({ visible, rows, onClose, onOpenRecord
                 </View>
                 <Text style={{ marginTop: 9, fontSize: 12, fontWeight: '800', color: '#3c4651', textAlign: 'center' }}>No {meta.label} home delivery requests yet</Text>
                 <Text style={{ marginTop: 4, maxWidth: 260, fontSize: 10.5, lineHeight: 15, color: '#8b95a1', textAlign: 'center' }}>
-                  When Paicart books your parcel with Pathao it will appear here with live tracking.
+                  Choose Home Delivery (Pathao) on a To Receive item and it moves here with live tracking.
                 </Text>
               </View>
             ) : (

@@ -192,7 +192,7 @@ function useKeyboardOverlap(viewRef) {
 
 /* The option list a <select> shows, as an in-screen bottom sheet. Options are
    { value, label }; `searchable` adds a filter box for the long lists
-   (districts, RedX areas). */
+   (Pathao cities, zones and areas). */
 export function PickerSheet({ visible, title, options, value, onSelect, onClose, searchable = false }) {
   return (
     <Overlay visible={visible} onClose={onClose} zIndex={60}>

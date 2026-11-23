@@ -14,10 +14,12 @@ import {
 import { updateUser, requestAccountDeletion } from '@/lib/firebaseUtils';
 import { signOutEverywhere } from '@/lib/firebase';
 import { DeleteAccountCard, DeleteAccountSheet } from '@/components/profile/DeleteAccount';
-import { getRedxAreas } from '@/lib/api';
 import {
-  DISTRICT_ALIASES, toWebAddress, toWebBook, isDefaultShipping, addrPhone, addrThana, addrDivision,
+  toWebAddress, toWebBook, isDefaultShipping, addrPhone,
 } from '@/lib/address';
+import {
+  addressAreaLine, buildPathaoAddress, getPathaoAreas, getPathaoCities, getPathaoZones,
+} from '@/lib/pathaoLocations';
 import { toast } from '@/lib/toast';
 import { TABS as NAV_TABS } from '@/navigation/routes';
 import { goHome } from '@/navigation/goHome';
@@ -42,13 +44,13 @@ import { goHome } from '@/navigation/goHome';
    in-screen bottom sheets (searchable for districts and areas); press
    feedback, a sliding tab indicator, fades.
 
-   RedX areas: fetched straight from RedX (lib/api getRedxAreas), as the
-   web does, so every address gets its RedX `areaObj`. If the call fails
-   the Area / Thana picker falls back to the district's thanas/upazilas
-   from the address package and the address is saved with `areaObj: null`.
+   Delivery location: Pathao City → Zone / Thana → Area, loaded from
+   Paicart's Cloud Functions (lib/pathaoLocations), and saved with
+   buildPathaoAddress so every address carries the Pathao ids the admin
+   panel books with. Area is required only when the zone has areas.
+   Addresses saved before this (no `pathao`) show a "re-add" hint; editing
+   one asks for its Pathao location again.
    ═══════════════════════════════════════════════════════════════════════ */
-
-const bdAddress = require('@bangladeshi/bangladesh-address/build/src/index');
 
 const TABS = [
   { id: 'personal', label: 'Personal', Icon: User },
@@ -189,21 +191,11 @@ function CompanyTab({ currentUser }) {
 
 /* ── Address Book Tab ── */
 const EMPTY_FORM = {
-  addName: '', addMobileNo: '', division: '', district: '',
-  thana: '', addAddress: '', defaultShipping: false, defaultBilling: false,
+  addName: '', addMobileNo: '', cityId: '', zoneId: '', areaId: '',
+  addAddress: '', defaultShipping: false, defaultBilling: false,
 };
-
-/* Used only while RedX returns no areas (see header comment). */
-const localThanas = (district) => {
-  if (!district) return [];
-  let names = [];
-  try {
-    names = [...(bdAddress.thanaNamesOf?.(district) || []), ...(bdAddress.upazilaNamesOf?.(district) || [])];
-  } catch {
-    names = [];
-  }
-  return [...new Set(names)].sort((a, b) => a.localeCompare(b));
-};
+const EMPTY_LOC = { cities: [], zones: [], areas: [], loading: '', error: '' };
+const AMBER600 = '#d97706';
 
 function AddressCard({ addr, book, deleting, onDelete, onSetDefault, onEdit }) {
   const isDefault = isDefaultShipping(addr, book);
@@ -259,9 +251,10 @@ function AddressCard({ addr, book, deleting, onDelete, onSetDefault, onEdit }) {
           {/* Address details */}
           <View style={{ paddingLeft: 36, gap: 2 }}>
             <Text style={[TS.xs, { lineHeight: 16.5, color: C.gray600 }]}>{addr.address}</Text>
-            <Text style={[TS.xs, { color: C.gray500 }]}>
-              {addrThana(addr)}, {addr.district}, {addrDivision(addr)}
-            </Text>
+            {!!addressAreaLine(addr) && <Text style={[TS.xs, { color: C.gray500 }]}>{addressAreaLine(addr)}</Text>}
+            {!addr.pathao && (
+              <Text style={[tpx(10), { fontWeight: '600', color: AMBER600 }]}>Re-add this address to pick its Pathao delivery area</Text>
+            )}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 2 }}>
               <Phone size={9} color={C.gray400} />
               <Text style={[TS.xs, { color: C.gray500 }]}>{addrPhone(addr)}</Text>
@@ -309,73 +302,88 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
   const [deleting, setDeleting] = useState(null);
 
   const [form, setForm] = useState(EMPTY_FORM);
-  const [allAreas, setAllAreas] = useState([]);
-  const [areaObj, setAreaObj] = useState(null);
-  const [areasLoading, setAreasLoading] = useState(false);
-  const fetchSeq = useRef(0);
+  /* Pathao city → zone → area (via Paicart's server — lib/pathaoLocations) */
+  const [loc, setLoc] = useState(EMPTY_LOC);
+  const seq = useRef(0); // drops answers that arrive after a newer pick
   const formRef = useRef(null);
 
-  const divisions = useMemo(() => (bdAddress.allDivision ? bdAddress.allDivision() : []), []);
-  const districts = form.division
-    ? bdAddress.DivisionName?.[form.division]
-      ? bdAddress.districtsOf?.(bdAddress.DivisionName[form.division]) || []
-      : bdAddress.districtsOf?.(form.division) || []
-    : [];
-  const redxNames = useMemo(
-    () => [...allAreas].sort((a, b) => a.name.localeCompare(b.name)).map((a) => a.name),
-    [allAreas],
-  );
-  const areaNames = allAreas.length ? redxNames : areasLoading ? [] : localThanas(form.district);
+  useEffect(() => {
+    if (!showForm || loc.cities.length) return undefined;
+    let alive = true;
+    setLoc((l) => ({ ...l, loading: 'cities', error: '' }));
+    getPathaoCities()
+      .then((cities) => alive && setLoc((l) => ({ ...l, cities, loading: l.loading === 'cities' ? '' : l.loading })))
+      .catch((e) => alive && setLoc((l) => ({ ...l, loading: '', error: e.message })));
+    return () => {
+      alive = false;
+    };
+  }, [showForm, loc.cities.length]);
 
-  const fetchAreas = async (districtName) => {
-    const seq = ++fetchSeq.current;
-    setAreasLoading(true);
-    const alias = DISTRICT_ALIASES[districtName] || districtName;
+  const loadZones = async (cityId, keep = {}) => {
+    const n = ++seq.current;
+    setForm((f) => ({ ...f, cityId, zoneId: keep.zoneId || '', areaId: keep.areaId || '' }));
+    setLoc((l) => ({ ...l, zones: [], areas: [], loading: cityId ? 'zones' : '', error: '' }));
+    if (!cityId) return;
     try {
-      const areas = await getRedxAreas(alias);
-      if (seq === fetchSeq.current) setAllAreas(areas || []);
-    } catch {
-      if (seq === fetchSeq.current) setAllAreas([]);
-    } finally {
-      if (seq === fetchSeq.current) setAreasLoading(false);
+      const zones = await getPathaoZones(cityId);
+      if (n !== seq.current) return;
+      setLoc((l) => ({ ...l, zones, loading: keep.zoneId ? 'areas' : '' }));
+      if (keep.zoneId) loadAreas(keep.zoneId, keep, n);
+    } catch (e) {
+      if (n === seq.current) setLoc((l) => ({ ...l, loading: '', error: e.message }));
     }
   };
 
+  const loadAreas = async (zoneId, keep = {}, n0) => {
+    const n = n0 || ++seq.current;
+    setForm((f) => ({ ...f, zoneId, areaId: keep.areaId || '' }));
+    setLoc((l) => ({ ...l, areas: [], loading: zoneId ? 'areas' : '', error: '' }));
+    if (!zoneId) return;
+    try {
+      const areas = await getPathaoAreas(zoneId);
+      if (n === seq.current) setLoc((l) => ({ ...l, areas, loading: '' }));
+    } catch (e) {
+      if (n === seq.current) setLoc((l) => ({ ...l, loading: '', error: e.message }));
+    }
+  };
+
+  const city = loc.cities.find((c) => String(c.id) === String(form.cityId)) || null;
+  const zone = loc.zones.find((z) => String(z.id) === String(form.zoneId)) || null;
+  const area = loc.areas.find((a) => String(a.id) === String(form.areaId)) || null;
+
   const resetForm = () => {
-    fetchSeq.current += 1;
+    seq.current += 1;
     setForm(EMPTY_FORM);
-    setAllAreas([]);
-    setAreaObj(null);
-    setAreasLoading(false);
+    setLoc((l) => ({ ...EMPTY_LOC, cities: l.cities }));
     setEditing(null);
     setShowForm(false);
   };
 
   const openForm = (addr) => {
-    fetchSeq.current += 1;
+    seq.current += 1;
+    setLoc((l) => ({ ...EMPTY_LOC, cities: l.cities }));
     if (addr) {
       const a = toWebAddress(addr, book);
+      const pl = a.pathao || null;
       setEditing(a);
       setForm({
+        ...EMPTY_FORM,
         addName: a.name || '',
         addMobileNo: a.mobileNo || '',
-        division: a.division || '',
-        district: a.district || '',
-        thana: a.thana || '',
         addAddress: a.address || '',
         defaultShipping: isDefaultShipping(addr, book),
         defaultBilling: !!a.defaultBilling,
       });
-      setAreaObj(a.areaObj || null);
-      setAllAreas([]);
-      if (a.district) fetchAreas(a.district);
-      else setAreasLoading(false);
+      /* a Pathao-era address reopens on its city / zone / area */
+      if (pl && pl.cityId) {
+        loadZones(String(pl.cityId), {
+          zoneId: pl.zoneId ? String(pl.zoneId) : '',
+          areaId: pl.areaId ? String(pl.areaId) : '',
+        });
+      }
     } else {
       setEditing(null);
       setForm(EMPTY_FORM);
-      setAreaObj(null);
-      setAllAreas([]);
-      setAreasLoading(false);
     }
     setFormKey((k) => k + 1);
     setShowForm(true);
@@ -383,32 +391,39 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
   };
 
   const handleSave = async () => {
-    const { addName, addMobileNo, division, district, thana, addAddress } = form;
-    const needsArea = allAreas.length > 0;
-    if (!addName || !addMobileNo || !division || !district || !thana || !addAddress || (needsArea && !areaObj)) {
+    const { addName, addMobileNo, addAddress } = form;
+    if (!addName.trim() || !addMobileNo.trim() || !city || !zone || !addAddress.trim() || (loc.areas.length > 0 && !area)) {
       toast.error('Please fill all required fields');
+      return;
+    }
+    if (!/^01[3-9]\d{8}$/.test(addMobileNo.replace(/\D/g, '').replace(/^880/, '0'))) {
+      toast.error('Enter a valid mobile number (01XXXXXXXXX)');
+      return;
+    }
+    if (addAddress.trim().length < 10) {
+      toast.error('Street address must be at least 10 characters');
       return;
     }
     setSaving(true);
     try {
-      const fields = {
+      const built = buildPathaoAddress({
+        id: editing ? editing.id : undefined,
         name: addName,
-        address: addAddress,
         mobileNo: addMobileNo,
-        division,
-        district,
-        thana,
-        areaObj: areaObj || null,
+        address: addAddress,
+        city,
+        zone,
+        area,
         defaultShipping: form.defaultShipping,
         defaultBilling: form.defaultBilling,
-      };
+      });
       let next = toWebBook(book);
       if (form.defaultShipping) next = next.map((a) => ({ ...a, defaultShipping: false }));
       if (form.defaultBilling) next = next.map((a) => ({ ...a, defaultBilling: false }));
       if (editing) {
-        next = next.map((a) => (a.id === editing.id ? { ...editing, ...fields } : a));
+        next = next.map((a) => (a.id === editing.id ? built : a));
       } else {
-        next = [...next, { id: parseInt(Math.random() * 10000, 10), ...fields }];
+        next = [...next, built];
       }
       await updateUser({ ...currentUser, addressBook: next });
       toast.success(editing ? 'Address updated!' : 'Address added!');
@@ -446,41 +461,34 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
     }
   };
 
-  const pickDivision = () =>
+  const pickCityOpt = () =>
     openPicker({
-      key: 'division',
-      title: 'Division',
-      options: opts('Select Division', divisions),
-      value: form.division,
-      onSelect: (v) => setForm((f) => ({ ...f, division: v, district: '', thana: '' })),
+      key: 'city',
+      title: 'City',
+      searchable: loc.cities.length > 8,
+      options: [{ value: '', label: 'Select City' }, ...loc.cities.map((c) => ({ value: String(c.id), label: c.name }))],
+      value: form.cityId,
+      onSelect: (v) => loadZones(v),
     });
-  const pickDistrict = () =>
+  const pickZoneOpt = () =>
     openPicker({
-      key: 'district',
-      title: 'District',
-      searchable: districts.length > 8,
-      options: opts('Select District', districts),
-      value: form.district,
-      onSelect: (v) => {
-        setForm((f) => ({ ...f, district: v, thana: '' }));
-        fetchAreas(v);
-      },
+      key: 'zone',
+      title: 'Zone / Thana',
+      searchable: loc.zones.length > 8,
+      options: [{ value: '', label: 'Select Zone' }, ...loc.zones.map((z) => ({ value: String(z.id), label: z.name }))],
+      value: form.zoneId,
+      onSelect: (v) => loadAreas(v),
     });
-  const pickArea = () =>
+  const pickAreaOpt = () =>
     openPicker({
       key: 'area',
-      title: 'Area / Thana',
-      searchable: areaNames.length > 8,
-      options: opts('Select Area', areaNames),
-      value: form.thana,
-      onSelect: (v) => {
-        const found = allAreas.find((a) => a.name === v);
-        setForm((f) => ({ ...f, thana: v }));
-        if (found) setAreaObj(found);
-        else if (editing && editing.district === form.district && editing.thana === v) setAreaObj(editing.areaObj || null);
-        else setAreaObj(null);
-      },
+      title: 'Area',
+      searchable: loc.areas.length > 8,
+      options: [{ value: '', label: 'Select Area' }, ...loc.areas.map((a) => ({ value: String(a.id), label: a.name }))],
+      value: form.areaId,
+      onSelect: (v) => setForm((f) => ({ ...f, areaId: v })),
     });
+  const areaOptional = !!(loc.zones.length && form.zoneId && !loc.areas.length && loc.loading !== 'areas');
 
   return (
     <View style={{ gap: 10 }}>
@@ -569,38 +577,64 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
                 />
               </Field>
 
-              <Field label="Division *">
+              <Field label="City *">
                 <SelectBox
-                  label={form.division || 'Select Division'}
-                  open={pickerKey === 'division'}
+                  label={city ? city.name : loc.loading === 'cities' ? 'Loading…' : 'Select City'}
+                  open={pickerKey === 'city'}
+                  disabled={loc.loading === 'cities' || !loc.cities.length}
+                  loading={loc.loading === 'cities'}
                   chevron={13}
                   chevronRight={12}
-                  onPress={pickDivision}
+                  onPress={pickCityOpt}
                 />
               </Field>
 
-              <Field label="District *">
+              <Field label="Zone / Thana *">
                 <SelectBox
-                  label={form.district || (form.division ? 'Select District' : 'Select Division first')}
-                  open={pickerKey === 'district'}
-                  disabled={!form.division}
+                  label={zone ? zone.name : loc.loading === 'zones' ? 'Loading…' : form.cityId ? 'Select Zone' : 'Select City first'}
+                  open={pickerKey === 'zone'}
+                  disabled={!form.cityId || loc.loading === 'zones'}
+                  loading={loc.loading === 'zones'}
                   chevron={13}
                   chevronRight={12}
-                  onPress={pickDistrict}
+                  onPress={pickZoneOpt}
                 />
               </Field>
 
-              <Field label="Area / Thana *">
+              <Field label={areaOptional ? 'Area' : 'Area *'}>
                 <SelectBox
-                  label={form.thana || (areasLoading ? 'Loading…' : form.district ? 'Select Area' : 'Select District first')}
+                  label={
+                    area
+                      ? area.name
+                      : loc.loading === 'areas'
+                        ? 'Loading…'
+                        : !form.zoneId
+                          ? 'Select Zone first'
+                          : loc.areas.length
+                            ? 'Select Area'
+                            : 'No areas — zone is enough'
+                  }
                   open={pickerKey === 'area'}
-                  disabled={!form.district || areasLoading}
-                  loading={areasLoading}
+                  disabled={!form.zoneId || loc.loading === 'areas' || !loc.areas.length}
+                  loading={loc.loading === 'areas'}
                   chevron={13}
                   chevronRight={12}
-                  onPress={pickArea}
+                  onPress={pickAreaOpt}
                 />
               </Field>
+
+              {area && area.homeDelivery === false && (
+                <View style={{ borderRadius: 8, borderWidth: 1, borderColor: AMBER200, backgroundColor: AMBER50, paddingHorizontal: 12, paddingVertical: 8 }}>
+                  <Text style={[tpx(11), { fontWeight: '600', color: AMBER700 }]}>
+                    Pathao doesn't deliver to the door in this area — choose a nearby area for home delivery, or use Office Pickup.
+                  </Text>
+                </View>
+              )}
+              {!!loc.error && (
+                <View style={{ borderRadius: 8, borderWidth: 1, borderColor: RED200, backgroundColor: C.red50, paddingHorizontal: 12, paddingVertical: 8 }}>
+                  <Text style={[tpx(11), { fontWeight: '600', color: '#dc2626' }]}>{loc.error}</Text>
+                </View>
+              )}
 
               <Field label="Street Address *">
                 <Input

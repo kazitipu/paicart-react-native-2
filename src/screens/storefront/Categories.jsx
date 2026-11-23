@@ -3,7 +3,8 @@ import { View, Text, Pressable, SectionList, LayoutAnimation } from 'react-nativ
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronRight, ChevronDown } from 'lucide-react-native';
-import { CATEGORY_TREE, ICON_BG } from '@/data/categoryTree';
+import { CATEGORY_TREE } from '@/data/categoryTree';
+import CategoryIcon from '@/components/CategoryIcon';
 import colors from '@/theme/colors';
 
 /* On the web this was a 215px drawer pinned to the left of the storefront,
@@ -13,50 +14,43 @@ import colors from '@/theme/colors';
    `toggle-categories` event plumbing or the `openCategoriesOnLoad`
    sessionStorage handshake the web needed to open it from another page. */
 
-const QUICK_LINKS = [
-  { label: '📦 Product Request', screen: 'BuyForMe', className: 'bg-violet-500' },
-  { label: '🚢 Ship For Me', screen: 'ShipForMeForm', className: 'bg-orange-500' },
-  { label: '📍 Track Order', screen: 'TrackOrder', className: 'bg-blue-500' },
-  { label: '📋 How to Order', screen: 'HowToOrder', className: 'bg-emerald-500' },
-];
 
-function CategoryRow({ cat, iconClass, open, onToggle, onPickKeyword }) {
+function CategoryRow({ cat, open, onToggle, onPickKeyword }) {
   return (
     <View className="border-b border-gray-100">
       <Pressable
         onPress={onToggle}
-        className={`flex-row items-center gap-2.5 px-3 py-3 ${open ? 'bg-red-50' : ''}`}
+        className={`flex-row items-center gap-3 px-4 py-3 ${open ? 'bg-red-50' : ''}`}
       >
-        <View className={`w-7 h-7 rounded-lg items-center justify-center ${iconClass}`}>
-          <Text className="text-smd">{cat.icon}</Text>
-        </View>
+        <CategoryIcon id={cat.id} box={42} size={23} />
         <Text
-          className={`text-tiny font-medium flex-1 ${open ? 'text-brand' : 'text-gray-700'}`}
+          style={{ fontSize: 15.5, lineHeight: 20 }}
+          className={`font-semibold flex-1 ${open ? 'text-brand' : 'text-gray-800'}`}
         >
           {cat.id}
         </Text>
         {open ? (
-          <ChevronDown size={12} color={colors.brand} />
+          <ChevronDown size={18} color={colors.brand} />
         ) : (
-          <ChevronRight size={12} color="#d1d5db" />
+          <ChevronRight size={18} color="#c7cbd1" />
         )}
       </Pressable>
 
       {open && (
-        <View className="bg-red-50/60 px-3 py-2.5 border-l-2 border-brand ml-4 mr-1">
+        <View className="bg-red-50/60 px-3 py-3 border-l-2 border-brand ml-5 mr-2">
           {cat.sub.map((group) => (
             <View key={group.label} className="mb-3">
-              <Text className="text-xxs uppercase tracking-widest text-gray-400 font-bold mb-1.5">
+              <Text style={{ fontSize: 11.5 }} className="uppercase tracking-widest text-gray-400 font-bold mb-2">
                 {group.label}
               </Text>
-              <View className="flex-row flex-wrap gap-1">
+              <View className="flex-row flex-wrap gap-1.5">
                 {group.items.map((item) => (
                   <Pressable
                     key={item}
                     onPress={() => onPickKeyword(item)}
-                    className="bg-white border border-gray-200 rounded-full px-2 py-1 active:bg-brand"
+                    className="bg-white border border-gray-200 rounded-full px-3 py-1.5 active:bg-brand"
                   >
-                    <Text className="text-3xs text-gray-600">{item}</Text>
+                    <Text style={{ fontSize: 13.5 }} className="text-gray-700">{item}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -88,9 +82,9 @@ export default function Categories() {
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-white">
-      <View className="flex-row items-center gap-2 px-3 py-2.5 bg-primary">
-        <Text className="text-md leading-none">☰</Text>
-        <Text className="text-white font-bold text-tiny tracking-widest uppercase flex-1">
+      <View className="flex-row items-center gap-2 px-4 py-3 bg-primary">
+        <Text style={{ fontSize: 18 }} className="text-white leading-none">☰</Text>
+        <Text style={{ fontSize: 14.5 }} className="text-white font-bold tracking-widest uppercase flex-1">
           All Categories
         </Text>
       </View>
@@ -98,31 +92,15 @@ export default function Categories() {
       <SectionList
         sections={[{ data: CATEGORY_TREE }]}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
+        renderItem={({ item }) => (
           <CategoryRow
             cat={item}
-            iconClass={ICON_BG[index % ICON_BG.length]}
             open={openId === item.id}
             onToggle={() => toggle(item.id)}
             onPickKeyword={openKeyword}
           />
         )}
-        ListFooterComponent={
-          <View className="p-3 border-t border-gray-100 bg-gray-50 flex-row flex-wrap">
-            {QUICK_LINKS.map((l) => (
-              <View key={l.screen} className="w-1/2 p-1">
-                <Pressable
-                  onPress={() => navigation.navigate('MoreTab', { screen: l.screen })}
-                  className={`${l.className} rounded-lg py-2.5 px-2 active:opacity-80`}
-                >
-                  <Text className="text-3xs font-semibold text-white text-center">
-                    {l.label}
-                  </Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
-        }
+        contentContainerStyle={{ paddingBottom: 24 }}
       />
     </SafeAreaView>
   );

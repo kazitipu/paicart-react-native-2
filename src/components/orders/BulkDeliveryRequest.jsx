@@ -190,10 +190,11 @@ export function BulkDeliveryRequestModal({ visible, onClose }) {
     reload().finally(() => setLoading(false));
   }, [visible, reload]);
 
-  /* Preselect, once the lists are in, everything that has no request yet. */
+  /* Preselect, once the lists are in. */
   useEffect(() => {
     if (!visible || loading || preselected) return;
-    setSelected(new Set(items.filter((it) => !it.record.deliveryRequest && canChangeDeliveryRequest(it.record)).map((it) => it.key)));
+    /* preselect only the fully paid items that can be requested */
+    setSelected(new Set(items.filter((it) => canChangeDeliveryRequest(it.record) && deliveryPaymentState(it.kind, it.record) === 'paid').map((it) => it.key)));
     setPreselected(true);
   }, [visible, loading, preselected, items]);
 

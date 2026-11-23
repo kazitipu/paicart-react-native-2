@@ -15,6 +15,7 @@ import { C, SHADOW, ORANGE, Press, ScalePress, Spinner } from '@/components/prod
 import { getAllBookingsOfSingleUserRedux } from '@/store/actions';
 import { refundMode } from '@/lib/refund';
 import { getRequestBucket } from '@/lib/buckets';
+import { isToReceiveTab } from '@/lib/dashboardData';
 import { canPayBooking, getTotalDue } from '@/lib/requestMath';
 import { toast } from '@/lib/toast';
 import { BulkDeliveryButton } from '@/components/orders/BulkDeliveryRequest';
@@ -41,6 +42,8 @@ const matchesTab = (booking, tab) => {
   if (tab === 'All') return true;
   /* Cross-cutting flag, not a stage — same as the My Orders Refunds tab */
   if (tab === 'Refunds') return !!booking.refundStatus;
+  /* Pathao home deliveries live under My Home Delivery Request, not To Receive */
+  if (tab === 'To Receive') return isToReceiveTab(getRequestBucket(booking), booking);
   return getRequestBucket(booking) === tab;
 };
 

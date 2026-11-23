@@ -16,6 +16,7 @@ import ProductImage from '@/components/ui/ProductImage';
 import { C, SHADOW, ORANGE, Press, ScalePress, Spinner } from '@/components/product/ui';
 import { TS, tpx, RED } from '@/components/cart/CartBits';
 import { PickerSheet } from '@/components/profile/ProfileBits';
+import DeliveryAddressPicker, { AddressPickerSheet, useDeliveryAddress } from '@/components/address/DeliveryAddressPicker';
 import {
   GRAY50, PAGE_BG, ORANGE800, RED_SHADOW, MSG_SELECT, MSG_FILL,
   Field, Input, SelectBox, MethodButton, PastePill,
@@ -142,6 +143,12 @@ export default function BuyForMe() {
   const [ratesLoading, setRatesLoading] = useState(false);
   const [sheet, setSheet] = useState(null); // 'store' | 'country' | 'type'
   const [invalid, setInvalid] = useState(null); // { field, message }
+  /* Delivery address (users.addressBook, Pathao entries only) */
+  const addr = useDeliveryAddress(currentUser);
+  const preferAddress = addr.prefer; // stable (useCallback)
+  const [addrError, setAddrError] = useState('');
+  const [addrPicker, setAddrPicker] = useState(null); // City / Zone / Area list of the address form
+  const addrRef = useRef(null);
 
   /* Text fields: uncontrolled. Their text lives here; bumping formKey
      remounts them with new defaultValues (reset / Book Again / Paste). */
@@ -287,9 +294,13 @@ export default function BuyForMe() {
       setImageUrl(b.imageUrl || '');
       setRebookType(b.productType || '');
       setRebookFrom(b.bookingId);
+      /* the old request's delivery address: its book entry, or an extra
+         "From your previous request" row when it has Pathao data but is no
+         longer in the book; otherwise the default rule */
+      preferAddress(b.deliveryAddress || null);
       setInvalid(null);
     })();
-  }, [rebookParam, currentUser?.id, bookings, loadRates]);
+  }, [rebookParam, currentUser?.id, bookings, loadRates, preferAddress]);
 
   /* The old request's product type, once its rate row has loaded */
   const rebookRate = rebookType && !productType ? d2dRates.find((r) => r.id === rebookType) : null;
@@ -382,6 +393,7 @@ export default function BuyForMe() {
        behind after a successful submit. */
     setRebookFrom(null);
     setRebookType('');
+    preferAddress(null);
     setFormKey((k) => k + 1);
   };
 
@@ -418,6 +430,12 @@ export default function BuyForMe() {
       navigation.navigate('Login', { returnTo: 'BuyForMe' });
       return;
     }
+    if (!addr.deliveryAddress) {
+      setAddrError('Please choose a delivery address (or add a new one) before booking.');
+      setTimeout(() => reveal(addrRef), 50);
+      return;
+    }
+    setAddrError('');
     if (imageLoader) {
       toast.error('Wait for the image to be uploaded!');
       return;
@@ -455,6 +473,8 @@ export default function BuyForMe() {
         shipmentStatusScore: 1,
         status: 'Pending',
         orderStatus: 'Pending',
+        /* where the parcel goes in Bangladesh — users.addressBook entry, same shape as orders' deliveryAddress */
+        deliveryAddress: addr.deliveryAddress,
       });
     } catch {
       saved = null;
@@ -725,6 +745,19 @@ export default function BuyForMe() {
                 </ScalePress>
               </Field>
 
+              <Field label="Delivery Address" viewRef={addrRef}>
+                <DeliveryAddressPicker
+                  currentUser={currentUser}
+                  state={addr}
+                  error={addrError}
+                  onChange={() => setAddrError('')}
+                  kb={kb}
+                  openPicker={setAddrPicker}
+                  pickerKey={addrPicker?.key}
+                  accent={RED}
+                />
+              </Field>
+
               {/* Submit — `py-3 rounded-xl font-bold` with the searchShimmer band */}
               <Press
                 onPress={handleSubmit}
@@ -835,6 +868,7 @@ export default function BuyForMe() {
         }}
         onClose={() => setSheet(null)}
       />
+      <AddressPickerSheet picker={addrPicker} onClose={() => setAddrPicker(null)} />
     </View>
   );
 }

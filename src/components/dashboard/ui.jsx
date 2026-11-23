@@ -92,18 +92,24 @@ export const PANEL = {
 
 /* ── Where the web's hrefs go in the app ──
    dashboardData builds web URLs; here each record kind maps to its screen.
-   All of these live in the Orders tab stack, alongside this screen. */
+   The Overview lives in the More tab; the order / request / shipment, profile,
+   refund and points screens live in the Orders tab, so every jump goes
+   through it. `initial: false` keeps My Orders (the Orders tab's first
+   screen) underneath when that stack has not been opened yet, so back from
+   a detail screen lands on a list rather than leaving the tab empty. */
+export const toOrdersTab = (navigation, screen, params) =>
+  navigation.navigate(TABS.ORDERS, { screen, params, initial: screen === 'BuyShipMyOrders' });
 export const LIST_SCREEN = { order: 'BuyShipMyOrders', request: 'BuyShipMyRequests', ship: 'ShipMyRequests' };
 
 export const openRecord = (navigation, kind, id) => {
   if (!id) return;
-  if (kind === 'order') navigation.navigate('BuyShipOrderDetail', { orderId: String(id) });
-  else if (kind === 'request') navigation.navigate('BuyShipRequestDetail', { orderId: String(id) });
-  else navigation.navigate('ShipRequestDetail', { bookingId: String(id) });
+  if (kind === 'order') toOrdersTab(navigation, 'BuyShipOrderDetail', { orderId: String(id) });
+  else if (kind === 'request') toOrdersTab(navigation, 'BuyShipRequestDetail', { orderId: String(id) });
+  else toOrdersTab(navigation, 'ShipRequestDetail', { bookingId: String(id) });
 };
 
 export const openList = (navigation, kind, tab) =>
-  navigation.navigate(LIST_SCREEN[kind] || 'BuyShipMyOrders', tab ? { tab } : undefined);
+  toOrdersTab(navigation, LIST_SCREEN[kind] || 'BuyShipMyOrders', tab ? { tab } : undefined);
 
 /* A transaction's invoice link: one record → its detail, several → the list. */
 export const openTxnTarget = (navigation, t) => {

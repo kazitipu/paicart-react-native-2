@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import {
   ShoppingCart, Heart, User, ChevronDown, LogOut,
-  ShoppingBag, Ship, LayoutDashboard, Package,
+  ShoppingBag, Ship, Package,
 } from 'lucide-react-native';
 import { SearchPill } from '@/components/SearchBar';
 import { on, EVENTS } from '@/lib/events';
@@ -122,7 +122,6 @@ function UserMenu({ open, anchor, onClose, currentUser, isLoggedIn, go }) {
                 {currentUser.email}
               </Text>
             </View>
-            <MenuItem Icon={LayoutDashboard} label="Overview" onPress={item('DashboardOverview', TABS.ORDERS)} />
             <MenuItem Icon={Package} label="My Product Requests" onPress={item('BuyShipMyRequests', TABS.ORDERS)} />
             <MenuItem Icon={ShoppingBag} label="My Orders" onPress={item('BuyShipMyOrders', TABS.ORDERS)} />
             <MenuItem Icon={Ship} label="My Shipments" onPress={item('ShipMyRequests', TABS.ORDERS)} />

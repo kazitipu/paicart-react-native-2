@@ -1,4 +1,5 @@
 import { getShipBucket } from './buckets';
+import { isToReceiveTab } from './dashboardData';
 
 /* Freight-mode helpers.
  *
@@ -32,7 +33,9 @@ export const readyStepLabel = (record, airLabel = READY_STATUS) =>
 
 /* Which ship-for-me tab a request belongs to. The rule itself lives in
  * buckets.js, shared with the Cloud Function behind the dashboard counts. */
-export const matchShipTab = (req, tab) => tab === 'All' || getShipBucket(req) === tab;
+/* Pathao home deliveries live under My Home Delivery Request, not To Receive */
+export const matchShipTab = (req, tab) =>
+  tab === 'All' || (tab === 'To Receive' ? isToReceiveTab(getShipBucket(req), req) : getShipBucket(req) === tab);
 
 /* What a stored status reads as — mirrors the web's src/lib/shipment.js.
  * "Bangladesh warehouse" is the stage after BD customs and is shown as

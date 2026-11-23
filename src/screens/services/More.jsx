@@ -51,7 +51,7 @@ const SERVICES = [
 ];
 
 const ACCOUNT = [
-  { label: 'Notifications', tab: TABS.ORDERS, screen: 'Notifications', Icon: BellRing, color: '#E11D48', badge: 'notifications' },
+  { label: 'Notifications', tab: TABS.MORE, screen: 'Notifications', Icon: BellRing, color: '#E11D48', badge: 'notifications' },
   { label: 'My Orders', tab: TABS.ORDERS, screen: 'BuyShipMyOrders', Icon: ShoppingBag, color: '#FF6A00' },
   { label: 'My Shipments', tab: TABS.ORDERS, screen: 'ShipMyRequests', Icon: Truck, color: '#1677FF' },
   { label: 'Points & Level', tab: TABS.ORDERS, screen: 'Points', Icon: Award, color: '#F59E0B' },

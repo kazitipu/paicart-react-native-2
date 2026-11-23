@@ -1,38 +1,39 @@
 /* ─── Address book schema ───
  *
- * The web profile page (and the admin panel, which books RedX parcels from
- * `deliveryAddress.areaObj` and prints slips from the `defaultShipping`
- * entry) store each entry of `users/{id}.addressBook` as:
+ * Each entry of `users/{id}.addressBook` (web profile page, this app's
+ * profile screen and the admin panel all read the same shape):
  *
- *   { id, name, address, mobileNo, division, district, thana, areaObj,
+ *   { id, name, mobileNo, address, district: <Pathao city>, thana: <zone>,
+ *     area: <area name>, division,
+ *     pathao: { cityId, cityName, zoneId, zoneName, areaId, areaName,
+ *               homeDelivery },
  *     defaultShipping, defaultBilling }
  *
- * `thana` is the chosen RedX area's name and `areaObj` the whole RedX area
- * object ({ id, name, post_code, division_name, zone_id }); `id` is
- * parseInt(Math.random() * 10000).
+ * built by lib/pathaoLocations buildPathaoAddress. The admin panel books
+ * Pathao parcels straight from `pathao`.
  *
- * Earlier builds of this app wrote { isDefault, phone, area } instead. Those
- * entries are still READ through the helpers below, and rewritten in the web
- * shape (toWebAddress) whenever this app writes the address book again — no
- * bulk migration.
+ * Older entries may lack `pathao` (and may carry `areaObj` from the previous
+ * courier, or `division` from the address package) — they are still read
+ * through the helpers below; the profile screen asks the customer to re-add
+ * them to pick a Pathao delivery area.
+ *
+ * Earlier builds of this app wrote { isDefault, phone, area: {…} } instead.
+ * Those entries are still READ through the helpers below, and rewritten in
+ * the shared shape (toWebAddress) whenever this app writes the address book
+ * again — no bulk migration.
  */
 
 const bdAddress = require('@bangladeshi/bangladesh-address/build/src/index');
 
-/* RedX spells some districts differently from the address package (web
-   information/page.jsx DISTRICT_ALIASES, verbatim). */
-export const DISTRICT_ALIASES = {
-  Narsingdi: 'Norshingdi', Jhalokati: 'Jhalokathi', Pirojpur: 'Perojpur',
-  Chattogram: 'Chittagong', Lakshmipur: 'Laksmipur',
-  Sirajgonj: 'Sirajganj', Maulvibazar: 'Moulvibazar',
-};
-
-const LEGACY_KEYS = ['isDefault', 'phone', 'area'];
-const isLegacy = (a) => !!a && LEGACY_KEYS.some((k) => k in a);
+/* `area` is a string (Pathao area name) on current entries; only the old
+   app shape stored an object there. */
+const LEGACY_KEYS = ['isDefault', 'phone'];
+const isLegacy = (a) =>
+  !!a && (LEGACY_KEYS.some((k) => k in a) || (!!a.area && typeof a.area === 'object'));
 
 export const addrPhone = (a) => a?.mobileNo || a?.phone || '';
 export const addrThana = (a) => a?.thana || a?.areaObj?.name || a?.area?.name || '';
-export const addrAreaObj = (a) => a?.areaObj || a?.area || null;
+export const addrAreaObj = (a) => a?.areaObj || (a?.area && typeof a.area === 'object' ? a.area : null);
 export const addrAreaId = (a) => addrAreaObj(a)?.id ?? null;
 
 /* Legacy entries carried a district but no division. */
@@ -46,9 +47,13 @@ export const divisionOfDistrict = (district) => {
 };
 export const addrDivision = (a) => a?.division || divisionOfDistrict(a?.district);
 
-/* "address, thana, district, division" — what the web cards and checkout show. */
+/* "address, area, zone/thana, city/district[, division]" — what the cards
+   and checkout show. Pathao entries have no division. */
 export const addrLine = (a) =>
-  [a?.address, addrThana(a), a?.district, addrDivision(a)].filter(Boolean).join(', ');
+  [a?.address, typeof a?.area === 'string' ? a.area : '', addrThana(a), a?.district, a?.pathao ? a?.division : addrDivision(a)]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .join(', ');
 
 /* The web reads `defaultShipping` only. A legacy `isDefault` counts only when
    no entry in the book carries a web default, so the two can never disagree. */
@@ -71,7 +76,8 @@ export const toWebAddress = (a, book) => {
     division: addrDivision(a),
     district: a.district || '',
     thana: addrThana(a),
-    areaObj: a.areaObj || area || null,
+    areaObj: a.areaObj || (area && typeof area === 'object' ? area : null),
+    area: typeof area === 'string' ? area : '',
     defaultShipping: 'defaultShipping' in a ? !!a.defaultShipping : legacyDefault,
     defaultBilling: !!a.defaultBilling,
   };

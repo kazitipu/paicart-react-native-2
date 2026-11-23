@@ -14,6 +14,7 @@ import ProductImage from '@/components/ui/ProductImage';
 import { C, SHADOW, ORANGE, Press, ScalePress, Spinner, Radio } from '@/components/product/ui';
 import { TS, tpx, BODY } from '@/components/cart/CartBits';
 import { PickerSheet } from '@/components/profile/ProfileBits';
+import DeliveryAddressPicker, { AddressPickerSheet, useDeliveryAddress } from '@/components/address/DeliveryAddressPicker';
 import useHideOnScroll from '@/lib/useHideOnScroll';
 import { setShipForMeRedux } from '@/store/actions';
 import { uploadImage, uploadShipForMeFile, getAllWarehouses } from '@/lib/firebaseUtils';
@@ -419,6 +420,13 @@ export default function ShipForMeForm() {
   const [copied, setCopied] = useState(false);
   const [submitLoader, setSubmitLoader] = useState(false);
   const [sheet, setSheet] = useState(null); // 'origin' | 'contains'
+  /* ── Delivery address (users.addressBook, Pathao entries only) ── */
+  /* a restored draft brings back its chosen address (by key); when that
+     entry is gone the hook falls back to the default rule */
+  const addr = useDeliveryAddress(currentUser, restored?.deliveryAddressKey || null);
+  const [addrError, setAddrError] = useState('');
+  const [addrPicker, setAddrPicker] = useState(null); // City / Zone / Area list of the address form
+  const addrRef = useRef(null);
   const [formKey, setFormKey] = useState(0); // remounts the uncontrolled inputs on reset
   const copyTimer = useRef(null);
 
@@ -448,6 +456,7 @@ export default function ShipForMeForm() {
     imageUrl,
     waybillImage,
     packingListUrl,
+    deliveryAddressKey: addr.selectedKey,
   });
 
   const saveDraftAndLogin = () => {
@@ -579,6 +588,16 @@ export default function ShipForMeForm() {
     if (!imageUrl) { toast.error('Product picture is required'); return; }
     if (!waybillImage) { toast.error('Waybill picture is required'); return; }
     if (imageLoading || waybillLoading || packingListLoading) { toast.error('Wait for uploads to finish'); return; }
+    if (!addr.deliveryAddress) {
+      const msg = 'Please choose a delivery address (or add a new one) before submitting.';
+      setAddrError(msg);
+      toast.error(msg);
+      addrRef.current?.measureInWindow?.((_x, y) => {
+        scrollRef.current?.scrollTo({ y: Math.max(0, scrollY.value + y - topPad - 16), animated: true });
+      });
+      return;
+    }
+    setAddrError('');
 
     setSubmitLoader(true);
     const bookingId = `${Math.round(Math.random() * 1000000 - 1)}`;
@@ -609,6 +628,8 @@ export default function ShipForMeForm() {
           imageUrl,
           waybillImage,
           packingListUrl,
+          /* where the parcel goes in Bangladesh — users.addressBook entry, same shape as orders' deliveryAddress */
+          deliveryAddress: addr.deliveryAddress,
           /* preserved old fields — not collected via this form anymore */
           productType: '',
           productsTotalCost: '',
@@ -985,6 +1006,22 @@ export default function ShipForMeForm() {
               </View>
             </Section>
 
+            {/* Section 5: Delivery Address — where the parcel goes in Bangladesh */}
+            <View ref={addrRef} collapsable={false}>
+              <Section n={5} title="Delivery Address" delay={240}>
+                <DeliveryAddressPicker
+                  currentUser={currentUser}
+                  state={addr}
+                  error={addrError}
+                  onChange={() => setAddrError('')}
+                  kb={kb}
+                  openPicker={setAddrPicker}
+                  pickerKey={addrPicker?.key}
+                  accent={ORANGE}
+                />
+              </Section>
+            </View>
+
             {/* Warning notice */}
             <Animated.View
               entering={FadeIn.duration(260).delay(240)}
@@ -1075,6 +1112,7 @@ export default function ShipForMeForm() {
           }}
           onClose={() => setSheet(null)}
         />
+        <AddressPickerSheet picker={addrPicker} onClose={() => setAddrPicker(null)} />
       </View>
     </KbCtx.Provider>
   );
