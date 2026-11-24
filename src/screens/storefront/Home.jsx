@@ -36,6 +36,7 @@ import ProductImage from '@/components/ui/ProductImage';
 import Sweep from '@/components/ui/Sweep';
 import SupportFab from '@/components/SupportFab';
 import { TABS } from '@/navigation/routes';
+import { openInTab } from '@/navigation/openInTab';
 import { decorWave, decorRing } from '@/lib/decorClock';
 import { FlashList } from '@shopify/flash-list';
 
@@ -401,7 +402,7 @@ function ServiceCard({ s, i }) {
     <Animated.View entering={FadeInDown.delay(i * 90).duration(420).springify().damping(16)} style={{ flex: 1 }}>
     <Animated.View style={[{ flex: 1 }, cardStyle]}>
       <Pressable
-        onPress={() => navigation.navigate(TABS.MORE, { screen: s.screen })}
+        onPress={() => openInTab(TABS.MORE, s.screen)}
         onPressIn={() => {
           press.value = withTiming(0.96, { duration: 110 });
           nudge.value = withTiming(4, { duration: 160 });
@@ -916,7 +917,7 @@ export default function Home() {
                 ))}
           </View>
           <Pressable
-            onPress={() => navigation.navigate(TABS.MORE, { screen: 'Faq' })}
+            onPress={() => openInTab(TABS.MORE, 'Faq')}
             className="mt-3 flex-row items-center justify-center active:opacity-60"
             style={{ gap: 6 }}
           >

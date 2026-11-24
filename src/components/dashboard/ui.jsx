@@ -97,8 +97,15 @@ export const PANEL = {
    through it. `initial: false` keeps My Orders (the Orders tab's first
    screen) underneath when that stack has not been opened yet, so back from
    a detail screen lands on a list rather than leaving the tab empty. */
-export const toOrdersTab = (navigation, screen, params) =>
+export const toOrdersTab = (navigation, screen, params) => {
+  /* Already in a stack that has this screen (the More tab registers the
+     Orders screens too) — push it here, so Back comes straight back. */
+  if (navigation.getState?.()?.routeNames?.includes(screen)) {
+    navigation.navigate(screen, params);
+    return;
+  }
   navigation.navigate(TABS.ORDERS, { screen, params, initial: screen === 'BuyShipMyOrders' });
+};
 export const LIST_SCREEN = { order: 'BuyShipMyOrders', request: 'BuyShipMyRequests', ship: 'ShipMyRequests' };
 
 export const openRecord = (navigation, kind, id) => {

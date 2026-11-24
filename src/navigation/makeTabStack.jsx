@@ -9,9 +9,12 @@ import { SCREENS } from './screenRegistry';
 
    Lives in its own module (not RootNavigator) so TabNavigator can import it
    without a RootNavigator ⇄ TabNavigator require cycle. */
-export function makeTabStack(tab, initialRouteName) {
+export function makeTabStack(tab, initialRouteName, extraScreens = []) {
   const Stack = createNativeStackNavigator();
-  const names = screensForTab(tab);
+  /* extraScreens: screens of another tab that this tab may also open in its
+     own stack (not deep-linkable here — linking.js still maps them to their
+     home tab) */
+  const names = [...new Set([...screensForTab(tab), ...extraScreens])];
   return function TabStack() {
     return (
       <Stack.Navigator

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSelector } from 'react-redux';
 import { LayoutGrid, ShoppingCart, ShoppingBag, Menu } from 'lucide-react-native';
-import { TABS } from './routes';
+import { TABS, screensForTab } from './routes';
 import { makeTabStack } from './makeTabStack';
 import TabBar from './TabBar';
 import useNotifications from '@/lib/useNotifications';
@@ -45,7 +45,11 @@ const HomeStack = makeTabStack(TABS.HOME, 'Home');
    opens the dashboard Overview, which links everything the old More screen
    did. The More screen stays registered (deep link /more). */
 const OrdersStack = makeTabStack(TABS.ORDERS, 'BuyShipMyOrders');
-const MoreStack = makeTabStack(TABS.MORE, 'DashboardOverview');
+/* The More tab's Overview links to the order / request / shipment lists and
+   details. They open INSIDE the More stack (same screens as My Orders), so
+   Back returns to the Overview and the tab bar stays on More instead of
+   jumping to My Orders with its 1688 list underneath. */
+const MoreStack = makeTabStack(TABS.MORE, 'DashboardOverview', screensForTab(TABS.ORDERS));
 
 /* First screen of each tab — a tab press always returns there (TabBar). */
 const INITIAL_SCREENS = {

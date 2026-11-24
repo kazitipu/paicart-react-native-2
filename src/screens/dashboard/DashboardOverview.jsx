@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, Linking } from 'react-native';
+import { View, Text, Linking, AppState } from 'react-native';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import Clipboard from '@react-native-clipboard/clipboard';
@@ -52,6 +52,8 @@ import { BulkDeliveryButton } from '@/components/orders/BulkDeliveryRequest';
 const EMPTY = [];
 const RECOMMEND_FALLBACK = 'Ladies Bags';
 const REFOCUS_MS = 30000;
+/* back from the background: refresh sooner — the data may have moved on */
+const APP_RETURN_MS = 5000;
 
 const SOCIAL = [
   { name: 'phone', label: 'Call', url: `tel:${CONTACT.phone}` },
@@ -130,6 +132,14 @@ export default function DashboardOverview() {
   useFocusEffect(
     useCallback(() => {
       if (Date.now() - lastLoad.current > REFOCUS_MS) load();
+      /* Coming back to the app (from WhatsApp, the browser, a payment app …)
+         is not a navigation focus, so without this the counts stayed as they
+         were when the screen was first opened — e.g. Ship For Me To Receive
+         stuck at 0 after the admin moved parcels to the Paicart warehouse. */
+      const sub = AppState.addEventListener('change', (next) => {
+        if (next === 'active' && Date.now() - lastLoad.current > APP_RETURN_MS) load();
+      });
+      return () => sub.remove();
     }, [load]),
   );
 
