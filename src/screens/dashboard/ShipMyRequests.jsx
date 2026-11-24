@@ -555,7 +555,9 @@ export default function ShipMyRequests() {
                 {/* Uncontrolled — re-rendering the list on each keystroke must not drop characters. */}
                 <TextInput
                   onChangeText={setSearch}
-                  placeholder="Search by product name, booking ID, tracking…"
+                  placeholder="Search ID, tracking or product"
+                  multiline={false}
+                  numberOfLines={1}
                   placeholderTextColor={PLACEHOLDER}
                   autoCorrect={false}
                   autoCapitalize="none"

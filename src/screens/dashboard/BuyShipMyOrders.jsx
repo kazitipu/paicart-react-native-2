@@ -611,7 +611,9 @@ export default function BuyShipMyOrders() {
             {/* Uncontrolled — re-rendering the list on each keystroke must not drop characters. */}
             <TextInput
               onChangeText={setSearchQuery}
-              placeholder="Search by Order ID or Product…"
+              placeholder="Search order ID or product"
+              multiline={false}
+              numberOfLines={1}
               placeholderTextColor={PLACEHOLDER}
               autoCorrect={false}
               autoCapitalize="none"
