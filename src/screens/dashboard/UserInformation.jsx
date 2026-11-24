@@ -11,9 +11,7 @@ import { TS, tpx, RED, BODY, Checkbox } from '@/components/cart/CartBits';
 import {
   CARD, GRAY50, PAGE_GAP, ORANGE_SHADOW, Field, Input, SelectBox, OrangeButton, PickerSheet,
 } from '@/components/profile/ProfileBits';
-import { updateUser, requestAccountDeletion } from '@/lib/firebaseUtils';
-import { signOutEverywhere } from '@/lib/firebase';
-import { DeleteAccountCard, DeleteAccountSheet } from '@/components/profile/DeleteAccount';
+import { updateUser } from '@/lib/firebaseUtils';
 import {
   toWebAddress, toWebBook, isDefaultShipping, addrPhone,
 } from '@/lib/address';
@@ -751,30 +749,6 @@ export default function UserInformation() {
   const openPicker = (p) => setPicker(p);
   const closePicker = () => setPicker(null);
 
-  /* ── Account deletion request ── */
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const confirmDelete = async () => {
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      await requestAccountDeletion(currentUser);
-    } catch {
-      setDeleting(false);
-      toast.error('Could not submit your request. Please try again or contact support@paicart.com.');
-      return;
-    }
-    /* The request is saved; signing out is best-effort from here. */
-    try {
-      await signOutEverywhere(); // Providers' auth listener clears user, cart and wishlist
-    } catch {
-      /* the request still stands */
-    }
-    setDeleting(false);
-    setDeleteOpen(false);
-    toast.success('Account deletion requested. You have been signed out.');
-    goHome();
-  };
 
   const backToCheckout = () => {
     navigation.setParams({ from: undefined });
@@ -796,12 +770,6 @@ export default function UserInformation() {
       title="My Profile"
       overlays={
         <>
-        <DeleteAccountSheet
-          visible={deleteOpen}
-          loading={deleting}
-          onClose={() => setDeleteOpen(false)}
-          onConfirm={confirmDelete}
-        />
         <PickerSheet
           visible={!!picker}
           title={picker?.title}
@@ -931,9 +899,6 @@ export default function UserInformation() {
             )}
           </Animated.View>
         </View>
-
-        {/* ── Delete account (Google Play requirement; not on the web) ── */}
-        <DeleteAccountCard currentUser={currentUser} onPress={() => setDeleteOpen(true)} />
       </View>
     </DashboardLayout>
   );

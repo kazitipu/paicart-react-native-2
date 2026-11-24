@@ -387,6 +387,16 @@ export default function DashboardOverview() {
           />
         </Section>
 
+        {/* ── More: the full menu page (services, account, delete account) ── */}
+        <Section>
+          <SectionHeading title="More" subtitle="Settings and everything else" />
+          <QuickList
+            rows={[
+              { icon: 'grid', tone: 'slate', title: 'More Options', sub: 'Account settings, services and delete account', onPress: () => toMore(navigation, 'More') },
+            ]}
+          />
+        </Section>
+
         {/* ── Get in Touch ── */}
         <Section>
           <SectionHeading title="Get in Touch" subtitle="We are here to help" />

@@ -8,6 +8,8 @@ import { TS, tpx } from '@/components/cart/CartBits';
 import { CARD, Field, Input, PAGE_GAP } from '@/components/profile/ProfileBits';
 import { auth, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from '@/lib/firebase';
 import { toast } from '@/lib/toast';
+import { useSelector } from 'react-redux';
+import { useDeleteAccount } from '@/components/profile/DeleteAccount';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Port of web src/app/pages/dashboard/user/security/page.jsx (< 640px):
@@ -61,6 +63,9 @@ function PasswordInput({ inputRef, onChangeText, placeholder }) {
 export default function UserSecurity() {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [loading, setLoading] = useState(false);
+  const currentUser = useSelector((st) => st.user?.currentUser);
+  /* Delete account (Google Play requirement; not on the web) */
+  const deleteAccount = useDeleteAccount(currentUser);
   const refs = { currentPassword: useRef(null), newPassword: useRef(null), confirmPassword: useRef(null) };
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -116,7 +121,7 @@ export default function UserSecurity() {
   };
 
   return (
-    <DashboardLayout webChrome title="Security">
+    <DashboardLayout webChrome title="Security" overlays={deleteAccount.sheet}>
       <View style={{ gap: PAGE_GAP }}>
         {/* Hero */}
         <Animated.View
@@ -271,6 +276,8 @@ export default function UserSecurity() {
             </View>
           </View>
         </Animated.View>
+
+        {deleteAccount.card}
       </View>
     </DashboardLayout>
   );

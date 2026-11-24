@@ -29,6 +29,7 @@ import { Press, ScalePress } from '@/components/product/ui';
 import { signOutEverywhere } from '@/lib/firebase';
 import { computeBuyerLvl, getLevelMeta, getLevelProgress } from '@/lib/buyerLevel';
 import { toast } from '@/lib/toast';
+import { useDeleteAccount } from '@/components/profile/DeleteAccount';
 import { TABS } from '@/navigation/routes';
 import pkg from '../../../package.json';
 import { decorRing } from '@/lib/decorClock';
@@ -214,6 +215,8 @@ export default function More() {
   const cart = useSelector((s) => s.cartList?.cart || []);
   const wishlistCount = useSelector((s) => (s.wishlist?.wishlist || []).length);
   const isLoggedIn = !!currentUser?.id;
+  /* Delete account (Google Play requirement; not on the web) */
+  const deleteAccount = useDeleteAccount(currentUser);
   const [signingOut, setSigningOut] = useState(false);
 
   const cartCount = useMemo(
@@ -232,7 +235,10 @@ export default function More() {
 
   const { unreadCount } = useNotifications();
   const go = (screen) => navigation.navigate(screen);
-  const goTab = (tab, screen) => navigation.navigate(tab, { screen });
+  /* The More tab also registers the Orders screens — open them here so Back
+     returns to this page instead of jumping to the My Orders tab. */
+  const goTab = (tab, screen) =>
+    navigation.getState?.()?.routeNames?.includes(screen) ? navigation.navigate(screen) : navigation.navigate(tab, { screen });
   const needLogin = (fn) => () => (isLoggedIn ? fn() : navigation.navigate('Login'));
 
   const openWhatsApp = () => Linking.openURL(whatsappUrl()).catch(() => {});
@@ -454,6 +460,13 @@ export default function More() {
             </View>
           </Animated.View>
 
+          {/* ── Delete account ── */}
+          {isLoggedIn && (
+            <Animated.View entering={FadeIn.duration(300).delay(320)}>
+              {deleteAccount.card}
+            </Animated.View>
+          )}
+
           {/* ── Sign out ── */}
           {isLoggedIn && (
             <Animated.View entering={FadeIn.duration(300).delay(340)}>
@@ -481,6 +494,7 @@ export default function More() {
         pointerEvents="none"
         style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: insets.top, backgroundColor: PAGE_BG, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' }, barStyle]}
       />
+      {deleteAccount.sheet}
     </View>
   );
 }

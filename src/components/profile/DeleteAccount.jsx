@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Trash2, AlertTriangle, Clock, X } from 'lucide-react-native';
 import { C, Press, Spinner, Overlay, SHADOW } from '@/components/product/ui';
 import { TS, tpx } from '@/components/cart/CartBits';
 import { CARD } from '@/components/profile/ProfileBits';
+import { requestAccountDeletion } from '@/lib/firebaseUtils';
+import { signOutEverywhere } from '@/lib/firebase';
+import { toast } from '@/lib/toast';
+import { goHome } from '@/navigation/goHome';
 
 /* ─── Account deletion (Google Play's in-app requirement) ───
  * Not on the web site, which instead links to paicart.com/delete-account.
@@ -178,4 +182,38 @@ export function DeleteAccountSheet({ visible, loading, onClose, onConfirm }) {
       </View>
     </Overlay>
   );
+}
+
+/* The whole flow for a screen: the card to render in its content and the
+   sheet to pass as DashboardLayout `overlays`. Lives on Password & Security. */
+export function useDeleteAccount(currentUser) {
+  const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await requestAccountDeletion(currentUser);
+    } catch {
+      setDeleting(false);
+      toast.error('Could not submit your request. Please try again or contact support@paicart.com.');
+      return;
+    }
+    /* The request is saved; signing out is best-effort from here. */
+    try {
+      await signOutEverywhere(); // Providers' auth listener clears user, cart and wishlist
+    } catch {
+      /* the request still stands */
+    }
+    setDeleting(false);
+    setOpen(false);
+    toast.success('Account deletion requested. You have been signed out.');
+    goHome();
+  };
+
+  return {
+    card: <DeleteAccountCard currentUser={currentUser} onPress={() => setOpen(true)} />,
+    sheet: <DeleteAccountSheet visible={open} loading={deleting} onClose={() => setOpen(false)} onConfirm={confirmDelete} />,
+  };
 }
