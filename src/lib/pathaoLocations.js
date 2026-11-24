@@ -94,3 +94,8 @@ export const addressAreaLine = (a) =>
       .filter((v, i, arr) => arr.indexOf(v) === i)
       .join(', ')
     : '';
+
+/* Current Pathao status of one parcel (website GET /api/pathao/track)
+   → { consignmentId, status, statusSlug, updatedAt } — never cached. */
+export const getPathaoTracking = (consignmentId) =>
+  call(`track?consignmentId=${encodeURIComponent(String(consignmentId || '').trim())}`);

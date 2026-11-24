@@ -11,6 +11,7 @@ import { useDashboardKeyboard } from '@/components/DashboardLayout';
 import { toast } from '@/lib/toast';
 import { showDeliveryMoved, movedItem } from '@/lib/deliveryMoved';
 import { submitDeliveryRequest } from '@/lib/firebaseUtils';
+import PathaoTrackingSheet from '@/components/orders/PathaoTrackingSheet';
 import {
   DELIVERY_METHODS,
   DELIVERY_STATUS_LABEL,
@@ -60,6 +61,7 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
 
   const [localReq, setLocalReq] = useState(null);
   const [open, setOpen] = useState(false);
+  const [trackOpen, setTrackOpen] = useState(false);
   const [methodKey, setMethodKey] = useState(null);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -88,18 +90,32 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
   /* ── Pathao booked: tracking only ── */
   if (isPathaoBooked(rec)) {
     return (
-      <View
-        style={[
-          { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, borderColor: C.orange200, backgroundColor: C.orange50, paddingHorizontal: 12, paddingVertical: 10 },
-          style,
-        ]}
-      >
-        <Truck size={15} color={ORANGE} />
-        <Text style={{ flex: 1, fontSize: 11.5, color: '#9a3412' }}>
-          <Text style={{ fontWeight: '800' }}>Pathao Booked</Text> · Tracking ID:{' '}
-          <Text style={{ fontWeight: '800' }} selectable>{rec.pathaoBooking.consignmentId}</Text>
-        </Text>
-      </View>
+      <>
+        <Press
+          onPress={() => setTrackOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="See Pathao tracking"
+          style={({ pressed }) => [
+            { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, borderWidth: 1, borderColor: pressed ? '#fdba74' : C.orange200, backgroundColor: pressed ? '#ffedd5' : C.orange50, paddingHorizontal: 12, paddingVertical: 10 },
+            style,
+          ]}
+        >
+          <Truck size={15} color={ORANGE} />
+          <Text style={{ flex: 1, fontSize: 11.5, color: '#9a3412' }}>
+            <Text style={{ fontWeight: '800' }}>Pathao Booked</Text> · Tracking ID:{' '}
+            <Text style={{ fontWeight: '800' }}>{rec.pathaoBooking.consignmentId}</Text>
+          </Text>
+          <View style={{ borderRadius: 999, backgroundColor: ORANGE, paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#fff' }}>Track</Text>
+          </View>
+        </Press>
+        <PathaoTrackingSheet
+          visible={trackOpen}
+          onClose={() => setTrackOpen(false)}
+          consignmentId={String(rec.pathaoBooking.consignmentId)}
+          phone={rec.pathaoBooking.recipientPhone}
+        />
+      </>
     );
   }
 
