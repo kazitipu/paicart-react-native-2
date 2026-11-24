@@ -47,6 +47,14 @@ export const divisionOfDistrict = (district) => {
 };
 export const addrDivision = (a) => a?.division || divisionOfDistrict(a?.district);
 
+/* "area, zone/thana, city/district[, division]" (no street) — Pathao area
+   first when the zone has one; empty / repeated parts skipped */
+export const addrAreaLine = (a) =>
+  [typeof a?.area === 'string' ? a.area : '', addrThana(a), a?.district, a?.pathao ? a?.division : addrDivision(a)]
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i)
+    .join(', ');
+
 /* "address, area, zone/thana, city/district[, division]" — what the cards
    and checkout show. Pathao entries have no division. */
 export const addrLine = (a) =>

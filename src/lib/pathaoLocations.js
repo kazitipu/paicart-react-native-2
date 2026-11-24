@@ -2,10 +2,10 @@
  * the home-delivery sheet. Port of the website's src/lib/pathaoLocations.js
  * (same exports).
  *
- * Calls Paicart's own Cloud Functions (functions/pathao.js in
- * paicart-nextjs15), which hold the Pathao merchant credentials — nothing
- * secret is in this file. Plain fetch with the signed-in user's Firebase ID
- * token (anonymous users count); no Functions SDK, no native module.
+ * Calls the website's Next.js API (paicart.com/api/pathao/*, in
+ * paicart-nextjs15/src/app/api/pathao), which holds the Pathao merchant
+ * credentials — nothing secret is in this file. Plain fetch, no native
+ * module; location lists are public so no sign-in is needed.
  *
  * Saved address shape (users.addressBook[]):
  *   { id, name, mobileNo, address, district: <city>, thana: <zone>,
@@ -15,26 +15,18 @@
  *     defaultShipping, defaultBilling }
  * The admin panel books Pathao parcels straight from `pathao` — no extra
  * data needed. */
-import { auth } from './firebase';
-
-const FUNCTIONS_BASE = 'https://asia-south1-paicart.cloudfunctions.net';
+const PATHAO_API_BASE = 'https://paicart.com/api/pathao';
 const TIMEOUT_MS = 15000;
 
 const call = async (path, options = {}) => {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Please sign in to choose a delivery location.');
-  const token = await user.getIdToken();
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), TIMEOUT_MS) : null;
   let res;
   try {
-    res = await fetch(`${FUNCTIONS_BASE}/${path}`, {
+    res = await fetch(`${PATHAO_API_BASE}/${path}`, {
       ...options,
       signal: controller ? controller.signal : undefined,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      },
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
     });
   } catch {
     throw new Error('Could not reach Pathao. Please check your connection and try again.');
@@ -52,7 +44,7 @@ const listFor = (key, query) => {
   if (!cache.has(key)) {
     cache.set(
       key,
-      call(`pathaoLocations?${query}`).then((d) => d.list || []).catch((e) => {
+      call(`locations?${query}`).then((d) => d.list || []).catch((e) => {
         cache.delete(key);
         throw e;
       }),
@@ -67,7 +59,7 @@ export const getPathaoAreas = (zoneId) => listFor(`areas_${zoneId}`, `level=area
 
 /* → { price, finalPrice, codPercentage, codEnabled, additionalCharge } */
 export const getPathaoPrice = ({ cityId, zoneId, weight }) =>
-  call('pathaoPrice', { method: 'POST', body: JSON.stringify({ cityId, zoneId, weight }) });
+  call('price', { method: 'POST', body: JSON.stringify({ cityId, zoneId, weight }) });
 
 /* An address-book entry from the form + the chosen Pathao locations */
 export const buildPathaoAddress = ({ id, name, mobileNo, address, city, zone, area, defaultShipping, defaultBilling }) => ({

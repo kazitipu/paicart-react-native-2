@@ -315,6 +315,9 @@ export const isHomeDeliveryActive = (r) => {
   const dr = r.deliveryRequest;
   if (dr && dr.method && dr.status === 'cancelled') return false;
   if (dr && dr.method === 'pathao') return true;
+  /* Van / Truck, Sundorbon, Office pickup … stay in To Receive — even if an
+     older Pathao booking is still on the record */
+  if (dr && dr.method) return false;
   return !!(r.pathaoBooking && r.pathaoBooking.consignmentId);
 };
 

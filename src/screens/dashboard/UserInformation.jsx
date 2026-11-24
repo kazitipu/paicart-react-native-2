@@ -21,6 +21,7 @@ import {
   addressAreaLine, buildPathaoAddress, getPathaoAreas, getPathaoCities, getPathaoZones,
 } from '@/lib/pathaoLocations';
 import { toast } from '@/lib/toast';
+import SearchablePicker from '@/components/address/SearchablePicker';
 import { TABS as NAV_TABS } from '@/navigation/routes';
 import { goHome } from '@/navigation/goHome';
 
@@ -291,7 +292,7 @@ function Badge({ bg, label }) {
   );
 }
 
-function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
+function AddressBook({ currentUser, onDone }) {
   const kb = useDashboardKeyboard();
   const book = useMemo(() => currentUser?.addressBook || [], [currentUser?.addressBook]);
 
@@ -461,33 +462,18 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
     }
   };
 
-  const pickCityOpt = () =>
-    openPicker({
-      key: 'city',
-      title: 'City',
-      searchable: loc.cities.length > 8,
-      options: [{ value: '', label: 'Select City' }, ...loc.cities.map((c) => ({ value: String(c.id), label: c.name }))],
-      value: form.cityId,
-      onSelect: (v) => loadZones(v),
-    });
-  const pickZoneOpt = () =>
-    openPicker({
-      key: 'zone',
-      title: 'Zone / Thana',
-      searchable: loc.zones.length > 8,
-      options: [{ value: '', label: 'Select Zone' }, ...loc.zones.map((z) => ({ value: String(z.id), label: z.name }))],
-      value: form.zoneId,
-      onSelect: (v) => loadAreas(v),
-    });
-  const pickAreaOpt = () =>
-    openPicker({
-      key: 'area',
-      title: 'Area',
-      searchable: loc.areas.length > 8,
-      options: [{ value: '', label: 'Select Area' }, ...loc.areas.map((a) => ({ value: String(a.id), label: a.name }))],
-      value: form.areaId,
-      onSelect: (v) => setForm((f) => ({ ...f, areaId: v })),
-    });
+  const cityOptions = useMemo(() => loc.cities.map((c) => ({ value: String(c.id), label: c.name })), [loc.cities]);
+  const zoneOptions = useMemo(() => loc.zones.map((z) => ({ value: String(z.id), label: z.name })), [loc.zones]);
+  const areaOptions = useMemo(() => loc.areas.map((a) => ({ value: String(a.id), label: a.name })), [loc.areas]);
+  /* the profile's <SelectBox> look: white, red border + ring while open */
+  const pickerLook = {
+    accent: RED,
+    fieldStyle: { backgroundColor: '#ffffff', paddingLeft: 16, paddingRight: 36 },
+    pressedBg: GRAY50,
+    openStyle: { boxShadow: '0 0 0 2px rgba(230,34,34,0.3)' },
+    chevronSize: 13,
+    chevronRight: 12,
+  };
   const areaOptional = !!(loc.zones.length && form.zoneId && !loc.areas.length && loc.loading !== 'areas');
 
   return (
@@ -578,31 +564,35 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
               </Field>
 
               <Field label="City *">
-                <SelectBox
+                <SearchablePicker
+                  {...pickerLook}
+                  title="City"
                   label={city ? city.name : loc.loading === 'cities' ? 'Loading…' : 'Select City'}
-                  open={pickerKey === 'city'}
-                  disabled={loc.loading === 'cities' || !loc.cities.length}
+                  options={cityOptions}
+                  value={form.cityId}
+                  disabled={loc.loading !== 'cities' && !loc.cities.length}
                   loading={loc.loading === 'cities'}
-                  chevron={13}
-                  chevronRight={12}
-                  onPress={pickCityOpt}
+                  onSelect={(v) => loadZones(v)}
                 />
               </Field>
 
               <Field label="Zone / Thana *">
-                <SelectBox
+                <SearchablePicker
+                  {...pickerLook}
+                  title="Zone / Thana"
                   label={zone ? zone.name : loc.loading === 'zones' ? 'Loading…' : form.cityId ? 'Select Zone' : 'Select City first'}
-                  open={pickerKey === 'zone'}
-                  disabled={!form.cityId || loc.loading === 'zones'}
+                  options={zoneOptions}
+                  value={form.zoneId}
+                  disabled={!form.cityId}
                   loading={loc.loading === 'zones'}
-                  chevron={13}
-                  chevronRight={12}
-                  onPress={pickZoneOpt}
+                  onSelect={(v) => loadAreas(v)}
                 />
               </Field>
 
               <Field label={areaOptional ? 'Area' : 'Area *'}>
-                <SelectBox
+                <SearchablePicker
+                  {...pickerLook}
+                  title="Area"
                   label={
                     area
                       ? area.name
@@ -614,12 +604,11 @@ function AddressBook({ currentUser, onDone, openPicker, pickerKey }) {
                             ? 'Select Area'
                             : 'No areas — zone is enough'
                   }
-                  open={pickerKey === 'area'}
-                  disabled={!form.zoneId || loc.loading === 'areas' || !loc.areas.length}
+                  options={areaOptions}
+                  value={form.areaId}
+                  disabled={!form.zoneId || (loc.loading !== 'areas' && !loc.areas.length)}
                   loading={loc.loading === 'areas'}
-                  chevron={13}
-                  chevronRight={12}
-                  onPress={pickAreaOpt}
+                  onSelect={(v) => setForm((f) => ({ ...f, areaId: v }))}
                 />
               </Field>
 
@@ -938,7 +927,7 @@ export default function UserInformation() {
             )}
             {activeTab === 'company' && <CompanyTab currentUser={currentUser} />}
             {activeTab === 'address' && (
-              <AddressBook currentUser={currentUser} onDone={handleAddressDone} openPicker={openPicker} pickerKey={picker?.key} />
+              <AddressBook currentUser={currentUser} onDone={handleAddressDone} />
             )}
           </Animated.View>
         </View>

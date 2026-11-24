@@ -14,6 +14,7 @@ import RootNavigator from '@/navigation/RootNavigator';
 import { navigationRef } from '@/navigation/navigationRef';
 import linking from '@/navigation/linking';
 import ToastProvider from '@/components/ToastProvider';
+import DeliveryMovedSheet from '@/components/DeliveryMovedSheet';
 import PhotoSourceSheet from '@/components/ui/PhotoSourceSheet';
 import FloatingWhatsApp from '@/components/FloatingWhatsApp';
 import FlyToIconAnimation from '@/components/FlyToIconAnimation';
@@ -70,6 +71,8 @@ export default function App() {
           <FloatingWhatsApp />
           {/* Camera-or-gallery chooser behind every pickImage() call. */}
           <PhotoSourceSheet />
+          {/* "Home delivery requested" — lib/deliveryMoved showDeliveryMoved() */}
+          <DeliveryMovedSheet />
           <ToastProvider />
         </Providers>
       </SafeAreaProvider>

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
-import { MapPin, Phone, Plus, X, ChevronDown, AlertTriangle } from 'lucide-react-native';
+import { MapPin, Phone, Plus, X, AlertTriangle, ChevronDown } from 'lucide-react-native';
 import { C, ORANGE, Press, Spinner, Radio } from '@/components/product/ui';
 import { TS, tpx, BODY, Checkbox } from '@/components/cart/CartBits';
-import { PickerSheet } from '@/components/profile/ProfileBits';
+import SearchablePicker from '@/components/address/SearchablePicker';
 import { firestore, doc, updateDoc } from '@/lib/firebase';
 import {
   toWebAddress, toWebBook, pickDefaultAddress, isDefaultShipping, addrPhone, addrLine,
@@ -33,10 +33,8 @@ import {
    The chosen entry goes on the new record as `deliveryAddress`, run through
    toWebAddress like Place Order's `deliveryAddress`.
 
-   The City / Zone / Area lists open a PickerSheet that the SCREEN renders
-   at its root (an Overlay is absolutely positioned in its parent, so it
-   cannot live inside the scroll content): render <AddressPickerSheet> with
-   the state `openPicker` sets.
+   City / Zone / Area use the shared type-to-search SearchablePicker (its
+   sheet is a Modal, so nothing has to be rendered at the screen's root).
    ═══════════════════════════════════════════════════════════════════════ */
 
 export const isPathaoAddress = (a) => !!(a && a.pathao && a.pathao.cityId && a.pathao.zoneId);
@@ -120,25 +118,6 @@ export function useDeliveryAddress(currentUser, initialKey = null) {
   };
 }
 
-/* Root-level sheet for the City / Zone / Area lists. */
-export function AddressPickerSheet({ picker, onClose }) {
-  return (
-    <PickerSheet
-      visible={!!picker}
-      title={picker?.title || ''}
-      options={picker?.options || []}
-      value={picker?.value ?? ''}
-      searchable={!!picker?.searchable}
-      onSelect={(v) => {
-        const p = picker;
-        onClose();
-        p?.onSelect?.(v);
-      }}
-      onClose={onClose}
-    />
-  );
-}
-
 const EMPTY_FORM = { name: '', mobileNo: '', address: '', cityId: '', zoneId: '', areaId: '', defaultShipping: false };
 const EMPTY_LOC = { cities: [], zones: [], areas: [], loading: '', error: '' };
 
@@ -172,33 +151,6 @@ function AddrInput({ kb, accent, defaultValue, onChangeText, ...rest }) {
         {...rest}
       />
     </View>
-  );
-}
-
-function AddrSelect({ label, onPress, disabled, open, loading, accent }) {
-  return (
-    <Press
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => ({
-        height: 42,
-        borderWidth: 1,
-        borderRadius: 12,
-        justifyContent: 'center',
-        borderColor: open ? accent : C.gray200,
-        backgroundColor: pressed ? C.gray100 : C.gray50,
-        paddingLeft: 14,
-        paddingRight: 32,
-        opacity: disabled ? 0.7 : 1,
-      })}
-    >
-      <Text style={[TS.sm, { color: BODY }]} numberOfLines={1}>
-        {label}
-      </Text>
-      <View pointerEvents="none" style={{ position: 'absolute', right: 12 }}>
-        {loading ? <Spinner size={14} color={C.gray400} /> : <ChevronDown size={14} color={C.gray500} />}
-      </View>
-    </Press>
   );
 }
 
@@ -284,13 +236,14 @@ export default function DeliveryAddressPicker({
   error,
   onChange,
   kb,
-  openPicker,
-  pickerKey,
   accent = ORANGE,
 }) {
   const { list, entries, selectedKey, select, setLocalBook } = state;
 
   const [showForm, setShowForm] = useState(false);
+  /* With an address selected only that row shows, plus "Change address";
+     the full list (other entries, Update rows, Add New) opens on tap. */
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(null); // { entry } when updating an old address
   const [formKey, setFormKey] = useState(0);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -420,35 +373,14 @@ export default function DeliveryAddressPicker({
     select(String(built.id));
     onChange?.();
     closeForm();
+    setExpanded(false);
   };
 
-  const pickCity = () =>
-    openPicker({
-      key: 'addr-city',
-      title: 'City',
-      searchable: loc.cities.length > 8,
-      options: [{ value: '', label: 'Select City' }, ...loc.cities.map((c) => ({ value: String(c.id), label: c.name }))],
-      value: form.cityId,
-      onSelect: (v) => loadZones(v),
-    });
-  const pickZone = () =>
-    openPicker({
-      key: 'addr-zone',
-      title: 'Zone / Thana',
-      searchable: loc.zones.length > 8,
-      options: [{ value: '', label: 'Select Zone' }, ...loc.zones.map((z) => ({ value: String(z.id), label: z.name }))],
-      value: form.zoneId,
-      onSelect: (v) => loadAreas(v),
-    });
-  const pickArea = () =>
-    openPicker({
-      key: 'addr-area',
-      title: 'Area',
-      searchable: loc.areas.length > 8,
-      options: [{ value: '', label: 'Select Area' }, ...loc.areas.map((x) => ({ value: String(x.id), label: x.name }))],
-      value: form.areaId,
-      onSelect: (v) => setForm((f) => ({ ...f, areaId: v })),
-    });
+  const cityOptions = useMemo(() => loc.cities.map((c) => ({ value: String(c.id), label: c.name })), [loc.cities]);
+  const zoneOptions = useMemo(() => loc.zones.map((z) => ({ value: String(z.id), label: z.name })), [loc.zones]);
+  const areaOptions = useMemo(() => loc.areas.map((x) => ({ value: String(x.id), label: x.name })), [loc.areas]);
+  /* the form's select look: `bg-gray-50 border-gray-200 rounded-xl` */
+  const pickerLook = { accent, fieldStyle: { backgroundColor: C.gray50 }, pressedBg: C.gray100, chevronColor: C.gray500 };
 
   if (!currentUser?.id) {
     return (
@@ -459,10 +391,52 @@ export default function DeliveryAddressPicker({
     );
   }
 
+  const changeButton = (text) => (
+    <Press
+      onPress={() => setExpanded(true)}
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      style={({ pressed }) => ({
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        borderWidth: 1,
+        borderColor: C.orange200,
+        borderRadius: 12,
+        paddingVertical: 10,
+        backgroundColor: pressed ? C.orange50 : '#ffffff',
+      })}
+    >
+      <Text style={[TS.xs, { fontWeight: '700', color: accent }]}>{text}</Text>
+      <ChevronDown size={14} color={accent} />
+    </Press>
+  );
+
+  const selectedEntry = selectedKey ? entries.find((e) => e.key === selectedKey) : null;
+  /* Nothing usable selected but addresses saved: compact too — only the
+     default (or first) entry, greyed with its Update link, Add New Address
+     and "Change address · N more saved" for the rest. */
+  const compact = !expanded && !selectedEntry && entries.length > 0;
+  const primary = compact ? entries.find((e) => e.a === pickDefaultAddress(list)) || entries[0] : null;
+  const shown = compact ? [primary] : entries;
+  const more = entries.length - 1;
+
+  if (selectedEntry && !expanded) {
+    const saved = list.length;
+    return (
+      <View style={{ gap: 10 }}>
+        <AddressRow entry={selectedEntry} book={list} accent={accent} selected onPress={() => setExpanded(true)} />
+        {!!error && <ErrorLine message={error} />}
+        {changeButton(`Change address · ${saved} saved`)}
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: 10 }}>
-      {entries.length > 0 ? (
-        entries.map((entry) => (
+      {shown.length > 0 ? (
+        shown.map((entry) => (
           <AddressRow
             key={entry.key}
             entry={entry}
@@ -472,6 +446,8 @@ export default function DeliveryAddressPicker({
             onPress={() => {
               select(entry.key);
               onChange?.();
+              /* picking (or re-tapping the current one) collapses the list */
+              setExpanded(false);
             }}
             onUpdate={() => openForm(entry)}
           />
@@ -555,30 +531,35 @@ export default function DeliveryAddressPicker({
             </View>
             <View>
               <FormLabel>City *</FormLabel>
-              <AddrSelect
-                accent={accent}
+              <SearchablePicker
+                {...pickerLook}
+                title="City"
                 label={city ? city.name : loc.loading === 'cities' ? 'Loading…' : 'Select City'}
-                open={pickerKey === 'addr-city'}
-                disabled={loc.loading === 'cities' || !loc.cities.length}
+                options={cityOptions}
+                value={form.cityId}
+                disabled={loc.loading !== 'cities' && !loc.cities.length}
                 loading={loc.loading === 'cities'}
-                onPress={pickCity}
+                onSelect={(v) => loadZones(v)}
               />
             </View>
             <View>
               <FormLabel>Zone / Thana *</FormLabel>
-              <AddrSelect
-                accent={accent}
+              <SearchablePicker
+                {...pickerLook}
+                title="Zone / Thana"
                 label={zone ? zone.name : loc.loading === 'zones' ? 'Loading…' : form.cityId ? 'Select Zone' : 'Select City first'}
-                open={pickerKey === 'addr-zone'}
-                disabled={!form.cityId || loc.loading === 'zones'}
+                options={zoneOptions}
+                value={form.zoneId}
+                disabled={!form.cityId}
                 loading={loc.loading === 'zones'}
-                onPress={pickZone}
+                onSelect={(v) => loadAreas(v)}
               />
             </View>
             <View>
               <FormLabel>{areaOptional ? 'Area' : 'Area *'}</FormLabel>
-              <AddrSelect
-                accent={accent}
+              <SearchablePicker
+                {...pickerLook}
+                title="Area"
                 label={
                   area
                     ? area.name
@@ -590,10 +571,11 @@ export default function DeliveryAddressPicker({
                           ? 'Select Area'
                           : 'No areas — zone is enough'
                 }
-                open={pickerKey === 'addr-area'}
-                disabled={!form.zoneId || loc.loading === 'areas' || !loc.areas.length}
+                options={areaOptions}
+                value={form.areaId}
+                disabled={!form.zoneId || (loc.loading !== 'areas' && !loc.areas.length)}
                 loading={loc.loading === 'areas'}
-                onPress={pickArea}
+                onSelect={(v) => setForm((f) => ({ ...f, areaId: v }))}
               />
             </View>
 
@@ -672,6 +654,8 @@ export default function DeliveryAddressPicker({
           </View>
         </Animated.View>
       )}
+
+      {compact && more > 0 && changeButton(`Change address · ${more} more saved`)}
     </View>
   );
 }

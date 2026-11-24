@@ -33,6 +33,7 @@ import { cdn } from '@/lib/cdn';
 import { trackingNumbersOf } from '@/lib/cartons';
 import { TABS } from '@/navigation/routes';
 import DeliveryRequestPanel from '@/components/orders/DeliveryRequestPanel';
+import { addrLine } from '../../lib/address';
 
 /* ═══════════════════════════════════════════════════════════════════════
    Web pages/dashboard/buy-and-ship-for-me/my-orders/[orderId]/page.jsx at
@@ -648,10 +649,7 @@ export default function BuyShipOrderDetail() {
                     <MapPin size={13} color={OC.RED} />
                   </View>
                   <Text style={{ flex: 1, fontSize: 12, lineHeight: 19.5, color: C.gray700 }}>
-                    {addr.address}
-                    {addr.thana ? `, ${addr.thana}` : ''}
-                    {addr.district ? `, ${addr.district}` : ''}
-                    {addr.division ? `, ${addr.division}` : ''}
+                    {addrLine(addr)}
                   </Text>
                 </View>
                 {!!addr.mobileNo && (

@@ -16,7 +16,7 @@ import ProductImage from '@/components/ui/ProductImage';
 import { C, SHADOW, ORANGE, Press, ScalePress, Spinner } from '@/components/product/ui';
 import { TS, tpx, RED } from '@/components/cart/CartBits';
 import { PickerSheet } from '@/components/profile/ProfileBits';
-import DeliveryAddressPicker, { AddressPickerSheet, useDeliveryAddress } from '@/components/address/DeliveryAddressPicker';
+import DeliveryAddressPicker, { useDeliveryAddress } from '@/components/address/DeliveryAddressPicker';
 import {
   GRAY50, PAGE_BG, ORANGE800, RED_SHADOW, MSG_SELECT, MSG_FILL,
   Field, Input, SelectBox, MethodButton, PastePill,
@@ -24,6 +24,7 @@ import {
 import { getAllD2DRates, setProductRequest, uploadImage, getSingleProductRequest } from '@/lib/firebaseUtils';
 import { pickImage } from '@/lib/picker';
 import { toast } from '@/lib/toast';
+import { TABS } from '@/navigation/routes';
 import { goHome } from '@/navigation/goHome';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -147,7 +148,6 @@ export default function BuyForMe() {
   const addr = useDeliveryAddress(currentUser);
   const preferAddress = addr.prefer; // stable (useCallback)
   const [addrError, setAddrError] = useState('');
-  const [addrPicker, setAddrPicker] = useState(null); // City / Zone / Area list of the address form
   const addrRef = useRef(null);
 
   /* Text fields: uncontrolled. Their text lives here; bumping formKey
@@ -488,6 +488,8 @@ export default function BuyForMe() {
     dispatch({ type: 'SET_PRODUCT_REQUEST', payload: saved });
     toast.success('Your booking is successful! Our agent will contact you soon');
     resetForm();
+    /* straight to the customer's list, like Ship For Me */
+    navigation.navigate(TABS.ORDERS, { screen: 'BuyShipMyRequests' });
   };
 
   /* ── render ── */
@@ -752,8 +754,6 @@ export default function BuyForMe() {
                   error={addrError}
                   onChange={() => setAddrError('')}
                   kb={kb}
-                  openPicker={setAddrPicker}
-                  pickerKey={addrPicker?.key}
                   accent={RED}
                 />
               </Field>
@@ -868,7 +868,6 @@ export default function BuyForMe() {
         }}
         onClose={() => setSheet(null)}
       />
-      <AddressPickerSheet picker={addrPicker} onClose={() => setAddrPicker(null)} />
     </View>
   );
 }

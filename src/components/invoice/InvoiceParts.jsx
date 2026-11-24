@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image } from 'react-native';
+import { addrAreaLine } from '../../lib/address';
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Native port of the web's components/invoice/InvoiceParts.jsx (shared there
@@ -483,7 +484,7 @@ export const billToFromAddress = (a) =>
   a
     ? {
         name: a.name,
-        lines: [a.address, [a.thana, a.district, a.division].filter(Boolean).join(', ')],
+        lines: [a.address, addrAreaLine(a)],
         phone: a.mobileNo,
       }
     : null;
@@ -494,7 +495,7 @@ export const billToFromUser = (u) => {
   const a = book.find((x) => x && x.defaultShipping) || book[0];
   return {
     name: (a && a.name) || u.displayName,
-    lines: a ? [a.address, [a.thana, a.district, a.division].filter(Boolean).join(', ')] : [],
+    lines: a ? [a.address, addrAreaLine(a)] : [],
     phone: (a && a.mobileNo) || u.mobileNo,
     email: u.email,
   };

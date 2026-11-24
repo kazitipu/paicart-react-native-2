@@ -9,6 +9,7 @@ import { C, ORANGE, Press, ScalePress } from '@/components/product/ui';
 import { MethodRow, AddressBlock, NoteBox, blockerHint } from '@/components/orders/DeliveryBits';
 import { useDashboardKeyboard } from '@/components/DashboardLayout';
 import { toast } from '@/lib/toast';
+import { showDeliveryMoved, movedItem } from '@/lib/deliveryMoved';
 import { submitDeliveryRequest } from '@/lib/firebaseUtils';
 import {
   DELIVERY_METHODS,
@@ -23,6 +24,7 @@ import {
   paymentBlockers,
   defaultShippingAddress,
 } from '@/lib/deliveryRequest';
+import { addrLine } from '../../lib/address';
 
 /* ═══════════════════════════════════════════════════════════════════════
    "Request Delivery" for a To Receive record — website order ('order'),
@@ -130,9 +132,16 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
       await submitDeliveryRequest(kind, recordIdOf(kind, rec), payload);
       setLocalReq(payload);
       setOpen(false);
-      toast.success(methodKey === 'pathao'
-        ? 'Home delivery requested — find it under My Home Delivery Request'
-        : 'Delivery request submitted');
+      if (methodKey === 'pathao') {
+        /* the card leaves To Receive — say where it went (root-level sheet,
+           this panel unmounts when the list reloads) */
+        showDeliveryMoved({
+          items: [movedItem(kind, record)],
+          methodLabel: DELIVERY_METHODS.find((m) => m.key === 'pathao')?.label,
+        });
+      } else {
+        toast.success('Delivery request submitted');
+      }
       /* reload this record's list so the card moves to the right tab at once
          (a Pathao request leaves To Receive) */
       const reload = { order: getAllOrdersApiRedux, request: getAllBookingsOfSingleUserRedux, ship: getAllShipForMeOfSingleUserRedux }[kind];
@@ -153,7 +162,7 @@ export default function DeliveryRequestPanel({ kind, record, style }) {
        customer's current default — same as the admin's Delivery Requests */
     const savedAddr = req.address;
     const addr = savedAddr || address;
-    const addrText = addr ? [addr.name, addr.mobileNo, addr.address, addr.thana, addr.district, addr.division].filter(Boolean).join(', ') : '';
+    const addrText = addr ? [addr.name, addr.mobileNo, addrLine(addr)].filter(Boolean).join(', ') : '';
     const Row = ({ label, children }) => (
       <View style={{ flexDirection: 'row', gap: 8, marginTop: 5 }}>
         <Text style={{ width: 72, fontSize: 10.5, color: C.gray400 }}>{label}</Text>

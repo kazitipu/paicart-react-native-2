@@ -14,7 +14,7 @@ import ProductImage from '@/components/ui/ProductImage';
 import { C, SHADOW, ORANGE, Press, ScalePress, Spinner, Radio } from '@/components/product/ui';
 import { TS, tpx, BODY } from '@/components/cart/CartBits';
 import { PickerSheet } from '@/components/profile/ProfileBits';
-import DeliveryAddressPicker, { AddressPickerSheet, useDeliveryAddress } from '@/components/address/DeliveryAddressPicker';
+import DeliveryAddressPicker, { useDeliveryAddress } from '@/components/address/DeliveryAddressPicker';
 import useHideOnScroll from '@/lib/useHideOnScroll';
 import { setShipForMeRedux } from '@/store/actions';
 import { uploadImage, uploadShipForMeFile, getAllWarehouses } from '@/lib/firebaseUtils';
@@ -425,7 +425,6 @@ export default function ShipForMeForm() {
      entry is gone the hook falls back to the default rule */
   const addr = useDeliveryAddress(currentUser, restored?.deliveryAddressKey || null);
   const [addrError, setAddrError] = useState('');
-  const [addrPicker, setAddrPicker] = useState(null); // City / Zone / Area list of the address form
   const addrRef = useRef(null);
   const [formKey, setFormKey] = useState(0); // remounts the uncontrolled inputs on reset
   const copyTimer = useRef(null);
@@ -1015,8 +1014,6 @@ export default function ShipForMeForm() {
                   error={addrError}
                   onChange={() => setAddrError('')}
                   kb={kb}
-                  openPicker={setAddrPicker}
-                  pickerKey={addrPicker?.key}
                   accent={ORANGE}
                 />
               </Section>
@@ -1112,7 +1109,6 @@ export default function ShipForMeForm() {
           }}
           onClose={() => setSheet(null)}
         />
-        <AddressPickerSheet picker={addrPicker} onClose={() => setAddrPicker(null)} />
       </View>
     </KbCtx.Provider>
   );

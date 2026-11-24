@@ -7,6 +7,7 @@ import { C, ORANGE, Press, ScalePress } from '@/components/product/ui';
 import { money } from '@/components/dashboard/ui';
 import { MethodRow, AddressBlock, NoteBox } from '@/components/orders/DeliveryBits';
 import { toast } from '@/lib/toast';
+import { showDeliveryMoved, movedItem, recordTitle } from '@/lib/deliveryMoved';
 import { submitDeliveryRequests } from '@/lib/firebaseUtils';
 import {
   DELIVERY_METHODS,
@@ -47,11 +48,7 @@ const GROUPS = [
 ];
 const keyOf = (kind, rec) => `${kind}-${recordIdOf(kind, rec)}`;
 
-const titleOf = (kind, rec) => {
-  if (kind === 'order') return (rec.items && rec.items[0] && rec.items[0].name) || rec.shopName || '';
-  if (kind === 'request') return rec.productType || rec.othersProductName || '';
-  return rec.othersProductName || rec.productType || '';
-};
+const titleOf = recordTitle;
 
 /* All of the customer's To Receive records, as [{ key, kind, record }]. */
 function useToReceiveItems() {
@@ -244,7 +241,15 @@ export function BulkDeliveryRequestModal({ visible, onClose }) {
     setSubmitting(true);
     try {
       await submitDeliveryRequests(list);
-      toast.success(`Delivery requested for ${list.length} item${list.length === 1 ? '' : 's'}`);
+      if (methodKey === 'pathao') {
+        /* these leave To Receive — the root-level sheet says where they went */
+        showDeliveryMoved({
+          items: chosen.map(({ kind, record }) => movedItem(kind, record)),
+          methodLabel: DELIVERY_METHODS.find((m) => m.key === 'pathao')?.label,
+        });
+      } else {
+        toast.success(`Delivery requested for ${list.length} item${list.length === 1 ? '' : 's'}`);
+      }
       onClose();
       reload();
     } catch (e) {

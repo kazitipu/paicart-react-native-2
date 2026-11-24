@@ -5,6 +5,7 @@ import { Lock, MapPin, AlertTriangle } from 'lucide-react-native';
 import { C, ORANGE, Press } from '@/components/product/ui';
 import { money } from '@/components/dashboard/ui';
 import { TABS } from '@/navigation/routes';
+import { addrLine } from '../../lib/address';
 
 /* Shared pieces of the single (DeliveryRequestPanel) and bulk
    (BulkDeliveryRequestModal) Request Delivery forms. */
@@ -101,7 +102,7 @@ export function AddressBlock({ address, onBeforeNavigate }) {
     );
   }
 
-  const parts = [address.name, address.mobileNo, address.address, address.thana, address.district].filter(Boolean);
+  const parts = [address.name, address.mobileNo, addrLine(address)].filter(Boolean);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderRadius: 12, borderWidth: 1, borderColor: C.gray200, backgroundColor: '#ffffff', paddingHorizontal: 12, paddingVertical: 10 }}>
       <View style={{ marginTop: 1 }}>

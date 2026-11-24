@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, Linking } from 'react-native';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import Clipboard from '@react-native-clipboard/clipboard';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -87,6 +87,18 @@ export default function DashboardOverview() {
   const [refreshing, setRefreshing] = useState(false);
   const [servicesOpen, setServicesOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
+  /* "View my home deliveries" (components/DeliveryMovedSheet) lands here with
+     openHomeDelivery: true — open the list, then drop the param so a later
+     visit doesn't reopen it. */
+  const route = useRoute();
+  const openHomeDelivery = !!route.params?.openHomeDelivery;
+  useFocusEffect(
+    useCallback(() => {
+      if (!openHomeDelivery) return;
+      setDeliveryOpen(true);
+      navigation.setParams({ openHomeDelivery: undefined });
+    }, [openHomeDelivery, navigation]),
+  );
   const [complaintOpen, setComplaintOpen] = useState(false);
   const loaded = !uid || loadedFor === uid;
 
